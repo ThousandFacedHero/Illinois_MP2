@@ -14,6 +14,9 @@
 #include "Member.h"
 #include "EmulNet.h"
 #include "Queue.h"
+#include "sstream"
+#include "random"
+
 
 /**
  * Macros
@@ -31,7 +34,7 @@
 enum MsgTypes{
     JOINREQ,
     JOINREP,
-    DUMMYLASTMSGTYPE
+    GOSSIP
 };
 
 /**
@@ -75,6 +78,7 @@ public:
 	Address getJoinAddress();
 	void initMemberListTable(Member *memberNode);
 	void printAddress(Address *addr);
+    void split(const string &s, char delim, vector<string> &elems);
 	virtual ~MP1Node();
 };
 
