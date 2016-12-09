@@ -92,12 +92,8 @@ void MP1Node::nodeStart(char *servaddrstr, short servport) {
  * DESCRIPTION: Find out who I am and start up
  */
 int MP1Node::initThisNode(Address *joinaddr) {
-    /*
-     * This function is partially implemented and may require changes
-     */
-    //int id = *(int*)(&memberNode->addr.addr);
-    //int port = *(short*)(&memberNode->addr.addr[4]);
 
+    //TODO: Check to see if this node is the introducer, then insert yourself into the memberlist. Then remove the same logic from JOINREQ in recvCallBack.
     memberNode->bFailed = false;
     memberNode->inited = true;
     memberNode->inGroup = false;
@@ -117,9 +113,9 @@ int MP1Node::initThisNode(Address *joinaddr) {
  * DESCRIPTION: Join the distributed system
  */
 int MP1Node::introduceSelfToGroup(Address *joinaddr) {
-    //MessageHdr *msg;
+
 #ifdef DEBUGLOG
-    //static char s[1024];
+    static char s[1024];
 #endif
 
     if ( 0 == memcmp((char *)&(memberNode->addr.addr), (char *)&(joinaddr->addr), sizeof(memberNode->addr.addr))) {
@@ -132,20 +128,20 @@ int MP1Node::introduceSelfToGroup(Address *joinaddr) {
     else {
         string joinStr = "0";
         joinStr = joinStr + ',' + memberNode->addr.getAddress() + ',' + to_string(memberNode->heartbeat);
-        //char *msg = new char[joinStr.size() + 1];
-        //copy(joinStr.begin(), joinStr.end(), msg);
-        //msg[joinStr.size()] = '\0'; // don't forget the terminating 0
-        char * msg = strdup(joinStr.c_str());
+        char *msg = new char[joinStr.size() + 1];
+        copy(joinStr.begin(), joinStr.end(), msg);
+        msg[joinStr.size()] = '\0'; // don't forget the terminating 0
+
         int msgsize = (int)joinStr.size()+1;
 #ifdef DEBUGLOG
-        //sprintf(s, "Trying to join...");
-        //log->LOG(&memberNode->addr, s);
+        sprintf(s, "Trying to join...");
+        log->LOG(&memberNode->addr, s);
 #endif
 
         // send JOINREQ message to introducer member
         emulNet->ENsend(&memberNode->addr, joinaddr, msg, msgsize);
 
-        //delete[]msg;
+        delete[]msg;
     }
 
     return 1;
@@ -169,7 +165,7 @@ int MP1Node::finishUpThisNode(){
      * Clean up memberlist
      *
      */
-    //TODO
+    //TODO: Opposite of initThisNode
     return 0;
 }
 
@@ -278,11 +274,9 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
         }
 
         //Build the JoinRep message
-        //repMsg->msgType = JOINREP;
-        //char *repMsg = new char[list.size() + 1];
-        //copy(list.begin(), list.end(), repMsg);
-        //repMsg[list.size()] = '\0'; // don't forget the terminating 0
-        char *repMsg = strdup(list.c_str());
+        char *repMsg = new char[list.size() + 1];
+        copy(list.begin(), list.end(), repMsg);
+        repMsg[list.size()] = '\0'; // don't forget the terminating 0
         cout << "JoinReq outmsg MemberList String: " << string(repMsg) << endl;
 
         //Build msgsize
@@ -294,8 +288,8 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
         //Send the JoinRep message
         emulNet->ENsend(&memberNode->addr, &addr, repMsg, msgsize);
 
-        // don't forget to free the string after finished using it
-        //delete[]repMsg;
+        // don't forget to free the char after finished using it
+        delete[]repMsg;
 
         return 1;
     }
@@ -399,7 +393,6 @@ return 0;
     cout << "                Starting nodeLoopOps on node: ";
     printAddress(&memberNode->addr);
     //Create a timestamp of the current time
-    //long timestamp = (long) time(NULL);
 
     //Find my location in the memberlist
     int myLoc = 0;
@@ -410,7 +403,6 @@ return 0;
     }
 
     //Update own heartbeat and timestamp in membernode and in memberlist
-    //memberNode->heartbeat = memberNode->heartbeat +1;
     memberNode->memberList[myLoc].setheartbeat(++memberNode->heartbeat);
     memberNode->memberList[myLoc].settimestamp(par->globaltime);
 
@@ -452,13 +444,9 @@ return 0;
         char *gosMsg = new char[gosMemList.size() + 1];
         copy(gosMemList.begin(), gosMemList.end(), gosMsg);
         gosMsg[gosMemList.size()] = '\0'; // don't forget the terminating 0
-        //char *gosMsg = strdup(gosMemList.c_str());
 
         //Build msgsize
         int msgsize = (int)gosMemList.size()+1;
-
-        //Clear gosMemList until next time
-        //delete gosMemList;
 
         //Find non-failed nodes to gossip to and place node location into vector. Also exclude self from possible gossip targets.
         vector<int> nonFail;
@@ -485,7 +473,6 @@ return 0;
             }
         }
 
-        //delete msgsize;
         //Clear nonFail
         nonFail.clear();
         // don't forget to free the string after finished using it
