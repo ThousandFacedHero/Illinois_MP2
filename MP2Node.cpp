@@ -37,6 +37,7 @@ MP2Node::~MP2Node() {
 void MP2Node::updateRing() {
 	/*
 	 * Implement this. Parts of it are already implemented
+	 * TODO
 	 */
 	vector<Node> curMemList;
 	bool change = false;
@@ -48,6 +49,8 @@ void MP2Node::updateRing() {
 
 	/*
 	 * Step 2: Construct the ring
+	 * TODO: After constructing the ring, set the variables for neighbors that require replicas.
+	 * TODO: How to update/compare ring when a node has failed, without invalidating the HashTable? Be sure to flag the change, so the stabilization protocol runs
 	 */
 	// Sort the list based on the hashCode
 	sort(curMemList.begin(), curMemList.end());
@@ -60,10 +63,11 @@ void MP2Node::updateRing() {
 }
 
 /**
- * FUNCTION NAME: getMemberhipList
+ * FUNCTION NAME: getMembershipList
  *
  * DESCRIPTION: This function goes through the membership list from the Membership protocol/MP1 and
  * 				i) generates the hash code for each member
+ * 				TODO: Need to include the check to see if a node in memberList is valid (Heartbeat not 0)
  * 				ii) populates the ring member in MP2Node class
  * 				It returns a vector of Nodes. Each element in the vector contain the following fields:
  * 				a) Address of the node
@@ -110,6 +114,7 @@ size_t MP2Node::hashFunction(string key) {
 void MP2Node::clientCreate(string key, string value) {
 	/*
 	 * Implement this
+	 * TODO: Use neighbor variables to check for replicas
 	 */
 }
 
@@ -302,7 +307,8 @@ bool MP2Node::recvLoop() {
     	return false;
     }
     else {
-    	return emulNet->ENrecv(&(memberNode->addr), this->enqueueWrapper, NULL, 1, &(memberNode->mp2q));
+        emulNet->ENrecv(&(memberNode->addr), this->enqueueWrapper, NULL, 1, &(memberNode->mp2q));
+        return true;
     }
 }
 
@@ -319,7 +325,7 @@ int MP2Node::enqueueWrapper(void *env, char *buff, int size) {
  * FUNCTION NAME: stabilizationProtocol
  *
  * DESCRIPTION: This runs the stabilization protocol in case of Node joins and leaves
- * 				It ensures that there always 3 copies of all keys in the DHT at all times
+ * 				It ensures that there are always 3 copies of all keys in the DHT at all times
  * 				The function does the following:
  *				1) Ensures that there are three "CORRECT" replicas of all the keys in spite of failures and joins
  *				Note:- "CORRECT" replicas implies that every key is replicated in its two neighboring nodes in the ring
