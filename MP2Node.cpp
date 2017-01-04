@@ -35,31 +35,31 @@ MP2Node::~MP2Node() {
  * 				3) Calls the Stabilization Protocol
  */
 void MP2Node::updateRing() {
-	/*
-	 * Implement this. Parts of it are already implemented
-	 * TODO
-	 */
+
 	vector<Node> curMemList;
 	bool change = false;
 
-	/*
-	 *  Step 1. Get the current membership list from Membership Protocol / MP1
-	 */
+	 //Get the current membership list from Membership Protocol / MP1
 	curMemList = getMembershipList();
 
-	/*
-	 * Step 2: Construct the ring
-	 * TODO: After constructing the ring, set the variables for neighbors that require replicas.
-	 * TODO: How to update/compare ring when a node has failed, without invalidating the HashTable? Be sure to flag the change, so the stabilization protocol runs
-	 */
+	//Construct the ring
+
+    //TODO: After constructing the ring, set the variables for neighbors that require replicas.
+
+	//TODO: How to update/compare ring when a node has failed, without invalidating the HashTable? Be sure to flag the change, so the stabilization protocol runs
+
 	// Sort the list based on the hashCode
 	sort(curMemList.begin(), curMemList.end());
 
-
-	/*
-	 * Step 3: Run the stabilization protocol IF REQUIRED
-	 */
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
+    if (change == true and ht->currentSize() > 0){
+        stabilizationProtocol();
+    }
+
+    //Cleanup
+    curMemList.clear();
+
+    return;
 }
 
 /**
@@ -260,8 +260,7 @@ void MP2Node::checkMessages() {
 	}
 
 	/*
-	 * This function should also ensure all READ and UPDATE operation
-	 * get QUORUM replies
+	 * This function should also ensure all READ and UPDATE operation get QUORUM replies
 	 */
 }
 
