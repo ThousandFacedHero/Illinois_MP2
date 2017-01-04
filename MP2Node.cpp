@@ -36,20 +36,20 @@ MP2Node::~MP2Node() {
  */
 void MP2Node::updateRing() {
 
-	vector<Node> curMemList;
+	vector<Node> newMemList;
 	bool change = false;
 
 	 //Get the current membership list from Membership Protocol / MP1
-	curMemList = getMembershipList();
+	newMemList = getMembershipList();
 
-	//Construct the ring
+	//TODO: Construct the ring, if it isn't already constructed
 
-    //TODO: After constructing the ring, set the variables for neighbors that require replicas.
+    //TODO: After constructing the ring, set the variables for neighbors that require replicas.(Can write findNeighbors() to find them)
 
-	//TODO: How to update/compare ring when a node has failed, without invalidating the HashTable? Be sure to flag the change, so the stabilization protocol runs
+	//TODO: Compare new and current rings by iteration when a node has failed, flag the change for stabilization protocol.
 
 	// Sort the list based on the hashCode
-	sort(curMemList.begin(), curMemList.end());
+	sort(newMemList.begin(), newMemList.end());
 
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
     if (change == true and ht->currentSize() > 0){
@@ -57,7 +57,7 @@ void MP2Node::updateRing() {
     }
 
     //Cleanup
-    curMemList.clear();
+    newMemList.clear();
 
     return;
 }
@@ -67,7 +67,7 @@ void MP2Node::updateRing() {
  *
  * DESCRIPTION: This function goes through the membership list from the Membership protocol/MP1 and
  * 				i) generates the hash code for each member
- * 				TODO: Need to include the check to see if a node in memberList is valid (Heartbeat not 0)
+ * 				//TODO: Need to include the check to see if a node in memberList is valid (Heartbeat not 0)
  * 				ii) populates the ring member in MP2Node class
  * 				It returns a vector of Nodes. Each element in the vector contain the following fields:
  * 				a) Address of the node
@@ -112,10 +112,10 @@ size_t MP2Node::hashFunction(string key) {
  * 				3) Sends a message to the replica
  */
 void MP2Node::clientCreate(string key, string value) {
-	/*
-	 * Implement this
-	 * TODO: Use neighbor variables to check for replicas
-	 */
+
+    //TODO: Use Message class to construct message
+    //TODO: Use findNodes function
+
 }
 
 /**
@@ -128,9 +128,8 @@ void MP2Node::clientCreate(string key, string value) {
  * 				3) Sends a message to the replica
  */
 void MP2Node::clientRead(string key){
-	/*
-	 * Implement this
-	 */
+
+    //TODO
 }
 
 /**
@@ -143,9 +142,8 @@ void MP2Node::clientRead(string key){
  * 				3) Sends a message to the replica
  */
 void MP2Node::clientUpdate(string key, string value){
-	/*
-	 * Implement this
-	 */
+
+    //TODO
 }
 
 /**
@@ -158,9 +156,8 @@ void MP2Node::clientUpdate(string key, string value){
  * 				3) Sends a message to the replica
  */
 void MP2Node::clientDelete(string key){
-	/*
-	 * Implement this
-	 */
+
+    //TODO
 }
 
 /**
@@ -172,9 +169,8 @@ void MP2Node::clientDelete(string key){
  * 			   	2) Return true or false based on success or failure
  */
 bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
-	/*
-	 * Implement this
-	 */
+
+    //TODO
 	// Insert key, value, replicaType into the hash table
 }
 
@@ -187,9 +183,8 @@ bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
  * 			    2) Return value
  */
 string MP2Node::readKey(string key) {
-	/*
-	 * Implement this
-	 */
+
+    //TODO
 	// Read key from local hash table and return value
 }
 
@@ -202,9 +197,8 @@ string MP2Node::readKey(string key) {
  * 				2) Return true or false based on success or failure
  */
 bool MP2Node::updateKeyValue(string key, string value, ReplicaType replica) {
-	/*
-	 * Implement this
-	 */
+
+    //TODO
 	// Update key in local hash table and return true or false
 }
 
@@ -217,9 +211,8 @@ bool MP2Node::updateKeyValue(string key, string value, ReplicaType replica) {
  * 				2) Return true or false based on success or failure
  */
 bool MP2Node::deletekey(string key) {
-	/*
-	 * Implement this
-	 */
+
+    //TODO
 	// Delete the key from the local hash table
 }
 
@@ -232,9 +225,9 @@ bool MP2Node::deletekey(string key) {
  * 				2) Handles the messages according to message types
  */
 void MP2Node::checkMessages() {
-	/*
-	 * Implement this. Parts of it are already implemented
-	 */
+
+    //TODO
+
 	char * data;
 	int size;
 
@@ -244,24 +237,20 @@ void MP2Node::checkMessages() {
 
 	// dequeue all messages and handle them
 	while ( !memberNode->mp2q.empty() ) {
-		/*
-		 * Pop a message from the queue
-		 */
+        //Pop a message from the queue
 		data = (char *)memberNode->mp2q.front().elt;
 		size = memberNode->mp2q.front().size;
 		memberNode->mp2q.pop();
 
 		string message(data, data + size);
 
-		/*
-		 * Handle the message types here
-		 */
+		//TODO: Process the messages from client calls, into the server calls, then reply back to client.
+        //TODO: Process the messages from server replies, ONLY if QUORUM(2 nodes) of replies are received(for READ and UPDATE), otherwise fail it.
+        //TODO: When processing server create/update/delete, make sure the key exists first.
+        //TODO: On key creation, set replica type.
 
 	}
 
-	/*
-	 * This function should also ensure all READ and UPDATE operation get QUORUM replies
-	 */
 }
 
 /**
@@ -330,7 +319,6 @@ int MP2Node::enqueueWrapper(void *env, char *buff, int size) {
  *				Note:- "CORRECT" replicas implies that every key is replicated in its two neighboring nodes in the ring
  */
 void MP2Node::stabilizationProtocol() {
-	/*
-	 * Implement this
-	 */
+
+    //TODO
 }
