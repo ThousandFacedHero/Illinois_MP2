@@ -44,9 +44,10 @@ void MP2Node::updateRing() {
 
 	//TODO: Construct the ring, if it isn't already constructed
 
-    //TODO: After constructing the ring, set the variables for neighbors that require replicas.(Can write findNeighbors() to find them)
+    //TODO: After initially constructing the ring, set the variables for neighbors that require replicas.(Can write findNeighbors() to find them)
 
-	//TODO: Compare new and current rings by iteration when a node has failed, flag the change for stabilization protocol.
+	//TODO: Compare new and current rings by iteration(or count if nodes don't change their hash) when a node has failed or joined
+    //TODO: Send the changed nodes and their changeType to stabilizationProtocol.(ALT: just rely on findNeighbors function in stabProtocol)
 
 	// Sort the list based on the hashCode
 	sort(newMemList.begin(), newMemList.end());
@@ -114,7 +115,7 @@ size_t MP2Node::hashFunction(string key) {
 void MP2Node::clientCreate(string key, string value) {
 
     //TODO: Use Message class to construct message
-    //TODO: Use findNodes function
+    //TODO: Use findNodes function to make sure the key doesn't already exist somewhere. If not, call create on server(and it's rep neighbors) <= to the key's position(hashFunction()).
 
 }
 
@@ -266,6 +267,7 @@ vector<Node> MP2Node::findNodes(string key) {
 		// if pos <= min || pos > max, the leader is the min
 		if (pos <= ring.at(0).getHashCode() || pos > ring.at(ring.size()-1).getHashCode()) {
 			addr_vec.emplace_back(ring.at(0));
+            //TODO: Add checks to be sure the hashcode has actually been replicated to the next two nodes, in case of failures. This prevents server calls to erroneous nodes.
 			addr_vec.emplace_back(ring.at(1));
 			addr_vec.emplace_back(ring.at(2));
 		}
@@ -275,6 +277,7 @@ vector<Node> MP2Node::findNodes(string key) {
 				Node addr = ring.at(i);
 				if (pos <= addr.getHashCode()) {
 					addr_vec.emplace_back(addr);
+                    //TODO: Check here too.
 					addr_vec.emplace_back(ring.at((i+1)%ring.size()));
 					addr_vec.emplace_back(ring.at((i+2)%ring.size()));
 					break;
@@ -320,5 +323,8 @@ int MP2Node::enqueueWrapper(void *env, char *buff, int size) {
  */
 void MP2Node::stabilizationProtocol() {
 
-    //TODO
+    //TODO: For each key in this node's DHT, run findNodes(). If it doesn't return 2, replicate.
+    //TODO: For the incoming change data, do replication as needed. IE. copy keys to new nodes if position dictates OR copy keys to new neighbors if a neighbor failed.
+    //TODO: ALTERNATIVE: Can rerun findNeighbors to see if values differ, then run copies as needed, and update neighbors as needed.
+
 }
