@@ -37,6 +37,8 @@ private:
 	vector<Node> haveReplicasOf;
 	// Ring
 	vector<Node> ring;
+    //Ring location of this node
+    vector<Node> myRingPos;
 	// Hash Table
 	HashTable * ht;
 	// Member representing this member
@@ -58,7 +60,8 @@ public:
 	void updateRing();
 	vector<Node> getMembershipList();
 	size_t hashFunction(string key);
-	void findNeighbors();
+    vector<Node> findNeighborsUp(vector<Node> searchNode);
+    vector<Node> findNeighborsDown(vector<Node> searchNode);
 
 	// client side CRUD APIs
 	void clientCreate(string key, string value);

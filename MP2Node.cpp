@@ -43,11 +43,18 @@ void MP2Node::updateRing() {
 	newMemList = getMembershipList();
 
 	//TODO: Construct the ring, if it isn't already constructed
+    if (ring.size() < 1){
+        ring = newMemList;
+        //Find your own position in the ring
+        myRingPos.emplace_back(Node(memberNode->addr));
+        //TODO: After initially constructing the ring, set the variables for neighbors that require replicas.(findNeighborsUp/Down() to find them)
 
-    //TODO: After initially constructing the ring, set the variables for neighbors that require replicas.(Can write findNeighbors() to find them)
+    }
+
+
 
 	//TODO: Compare new and current rings by iteration(or count if nodes don't change their hash) when a node has failed or joined
-    //TODO: Send the changed nodes and their changeType to stabilizationProtocol.(ALT: just rely on findNeighbors function in stabProtocol)
+    //TODO: Rely on findNeighbors function in stabProtocol to set new neighbors
 
 	// Sort the list based on the hashCode
 	sort(newMemList.begin(), newMemList.end());
@@ -68,7 +75,6 @@ void MP2Node::updateRing() {
  *
  * DESCRIPTION: This function goes through the membership list from the Membership protocol/MP1 and
  * 				i) generates the hash code for each member
- * 				//TODO: Need to include the check to see if a node in memberList is valid (Heartbeat not 0)
  * 				ii) populates the ring member in MP2Node class
  * 				It returns a vector of Nodes. Each element in the vector contain the following fields:
  * 				a) Address of the node
@@ -78,12 +84,11 @@ vector<Node> MP2Node::getMembershipList() {
 	unsigned int i;
 	vector<Node> curMemList;
 	for ( i = 0 ; i < this->memberNode->memberList.size(); i++ ) {
-		Address addressOfThisMember;
-		int id = this->memberNode->memberList.at(i).getid();
-		short port = this->memberNode->memberList.at(i).getport();
-		memcpy(&addressOfThisMember.addr[0], &id, sizeof(int));
-		memcpy(&addressOfThisMember.addr[4], &port, sizeof(short));
-		curMemList.emplace_back(Node(addressOfThisMember));
+		if (this->memberNode->memberList.at(i).getheartbeat() > 0) {
+            Address addressOfThisMember(to_string(memberNode->memberList.at(i).getid()) + ":" +
+                                        to_string(memberNode->memberList.at(i).getport()));
+            curMemList.emplace_back(Node(addressOfThisMember));
+        }
 	}
 	return curMemList;
 }
@@ -101,6 +106,58 @@ size_t MP2Node::hashFunction(string key) {
 	std::hash<string> hashFunc;
 	size_t ret = hashFunc(key);
 	return ret%RING_SIZE;
+}
+
+/**
+ * FUNCTION NAME: findNeighborsUp
+ *
+ * DESCRIPTION: This functions finds a node's next two neighbors in the ring who have it's replicas.
+ *
+ * RETURNS:
+ * vector<Node> with next 2 nodes
+ */
+vector<Node> MP2Node::findNeighborsUp(vector<Node> searchNode) {
+
+    vector<Node> upNeighborAddrVec;
+    if (ring.size() >= 3) {
+        // grab next two nodes in ring after searchNode
+        for (int i; i < ring.size(); i++) {
+            if (searchNode.at(0).getHashCode() == ring.at(i).getHashCode()) {
+                //TODO: How to loop back around the ring when hitting the end of vector?
+                upNeighborAddrVec.emplace_back(ring.at(i+1));
+                upNeighborAddrVec.emplace_back(ring.at(i+2));
+                break;
+            }
+        }
+    }
+    return upNeighborAddrVec;
+
+}
+
+/**
+ * FUNCTION NAME: findNeighborsDown
+ *
+ * DESCRIPTION: This functions finds a node's previous two neighbors in the ring whose replicas it has.
+ *
+ * RETURNS:
+ * vector<Node> with previous 2 nodes
+ */
+vector<Node> MP2Node::findNeighborsDown(vector<Node> searchNode) {
+
+    vector<Node> downNeighborAddrVec;
+    if (ring.size() >= 3) {
+        // grab next two nodes in ring after searchNode
+        for (int i; i < ring.size(); i++) {
+            if (searchNode.at(0).getHashCode() == ring.at(i).getHashCode()) {
+                //TODO: How to loop around or back to the previous nodes when hitting the beginning of the vector?
+                downNeighborAddrVec.emplace_back(ring.at(i));
+                downNeighborAddrVec.emplace_back(ring.at(i));
+                break;
+            }
+        }
+    }
+    return downNeighborAddrVec;
+
 }
 
 /**
@@ -171,7 +228,7 @@ void MP2Node::clientDelete(string key){
  */
 bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
 
-    //TODO
+    //TODO: Note! Before creating a key, be sure they key doesn't already exist in this node's HT.
 	// Insert key, value, replicaType into the hash table
 }
 
@@ -245,8 +302,8 @@ void MP2Node::checkMessages() {
 
 		string message(data, data + size);
 
-		//TODO: Process the messages from client calls, into the server calls, then reply back to client.
-        //TODO: Process the messages from server replies, ONLY if QUORUM(2 nodes) of replies are received(for READ and UPDATE), otherwise fail it.
+		//TODO: Process the messages from client calls, into the server functions, then reply back to client.
+        //TODO: Process the messages from server readReplies, ONLY if QUORUM(2 nodes) of replies are received(for READ), otherwise fail it.
         //TODO: When processing server create/update/delete, make sure the key exists first.
         //TODO: On key creation, set replica type.
 
@@ -259,6 +316,7 @@ void MP2Node::checkMessages() {
  *
  * DESCRIPTION: Find the replicas of the given keyfunction
  * 				This function is responsible for finding the replicas of a key
+ * 				//TODO: NOTE! This function only tells you where a key should be, not that the key is actually in the found nodes' HT
  */
 vector<Node> MP2Node::findNodes(string key) {
 	size_t pos = hashFunction(key);
@@ -267,7 +325,6 @@ vector<Node> MP2Node::findNodes(string key) {
 		// if pos <= min || pos > max, the leader is the min
 		if (pos <= ring.at(0).getHashCode() || pos > ring.at(ring.size()-1).getHashCode()) {
 			addr_vec.emplace_back(ring.at(0));
-            //TODO: Add checks to be sure the hashcode has actually been replicated to the next two nodes, in case of failures. This prevents server calls to erroneous nodes.
 			addr_vec.emplace_back(ring.at(1));
 			addr_vec.emplace_back(ring.at(2));
 		}
@@ -277,7 +334,6 @@ vector<Node> MP2Node::findNodes(string key) {
 				Node addr = ring.at(i);
 				if (pos <= addr.getHashCode()) {
 					addr_vec.emplace_back(addr);
-                    //TODO: Check here too.
 					addr_vec.emplace_back(ring.at((i+1)%ring.size()));
 					addr_vec.emplace_back(ring.at((i+2)%ring.size()));
 					break;
@@ -323,8 +379,8 @@ int MP2Node::enqueueWrapper(void *env, char *buff, int size) {
  */
 void MP2Node::stabilizationProtocol() {
 
-    //TODO: For each key in this node's DHT, run findNodes(). If it doesn't return 2, replicate.
-    //TODO: For the incoming change data, do replication as needed. IE. copy keys to new nodes if position dictates OR copy keys to new neighbors if a neighbor failed.
-    //TODO: ALTERNATIVE: Can rerun findNeighbors to see if values differ, then run copies as needed, and update neighbors as needed.
+    //TODO: Rerun findNeighbors to see if values differ. If different, then copy keys as needed, and update neighbor variables.
+    //TODO: For each key in this node's DHT, run findNodes(). If it doesn't return a vector with myRingPos, replicate to neighbors.
+
 
 }
