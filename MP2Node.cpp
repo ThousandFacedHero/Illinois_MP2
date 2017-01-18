@@ -41,26 +41,41 @@ void MP2Node::updateRing() {
 
 	 //Get the current membership list from Membership Protocol / MP1
 	newMemList = getMembershipList();
+    // Sort the list based on the hashCode
+    sort(newMemList.begin(), newMemList.end());
 
-	//TODO: Construct the ring, if it isn't already constructed
+	//Construct the ring, if it isn't already constructed
     if (ring.size() < 1){
         ring = newMemList;
         //Find your own position in the ring
         myRingPos.emplace_back(Node(memberNode->addr));
-        //TODO: After initially constructing the ring, set the variables for neighbors that require replicas.(findNeighborsUp/Down() to find them)
-
+        //After initially constructing the ring, set/sort the variables for neighbors that require replicas.
+        hasMyReplicas = findNeighborsUp(myRingPos);
+        sort(hasMyReplicas.begin(), hasMyReplicas.end());
+        haveReplicasOf= findNeighborsDown(myRingPos);
+        sort(haveReplicasOf.begin(), haveReplicasOf.end());
     }
 
-
-
-	//TODO: Compare new and current rings by iteration(or count if nodes don't change their hash) when a node has failed or joined
-    //TODO: Rely on findNeighbors function in stabProtocol to set new neighbors
-
-	// Sort the list based on the hashCode
-	sort(newMemList.begin(), newMemList.end());
+	//Compare new and current rings by iteration(or count if nodes don't change their hash) when a node has failed or joined
+    if (ring.size() != newMemList.size()){
+        //Rings are different, set changed and call stab protocol
+        change = true;
+    } else {
+        //Ring size is the same, so let's iterate through to check for sure.
+        /* for (int i = 0; i < ring.size(); i++){
+            if (ring.at((unsigned long) i).getHashCode() != newMemList.at((unsigned long) i).getHashCode()){
+                //Rings differ, call stab
+                change = true;
+                break;
+            }
+        }
+         */
+        //TODO: since both lists are guaranteed to be sorted, run the "set difference" algorithm on them, and output to a vector
+        //TODO: Run a loop on the output vector to see which nodes are failures and which are adds. Then log them accordingly.
+    }
 
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
-    if (change == true and ht->currentSize() > 0){
+    if (ht->currentSize() > 0 & change){
         stabilizationProtocol();
     }
 
@@ -121,11 +136,19 @@ vector<Node> MP2Node::findNeighborsUp(vector<Node> searchNode) {
     vector<Node> upNeighborAddrVec;
     if (ring.size() >= 3) {
         // grab next two nodes in ring after searchNode
-        for (int i; i < ring.size(); i++) {
-            if (searchNode.at(0).getHashCode() == ring.at(i).getHashCode()) {
-                //TODO: How to loop back around the ring when hitting the end of vector?
-                upNeighborAddrVec.emplace_back(ring.at(i+1));
-                upNeighborAddrVec.emplace_back(ring.at(i+2));
+        for (int i=0; i < ring.size(); i++) {
+            if (searchNode.at(0).getHashCode() == ring.at((unsigned long) i).getHashCode()) {
+                //Loop back around the ring when hitting the end of vector
+                if ((i + 1) == ring.size()){
+                    upNeighborAddrVec.emplace_back(ring.at(ring.size()));
+                    upNeighborAddrVec.emplace_back(ring.at(0));
+                } else if (i == ring.size()){
+                    upNeighborAddrVec.emplace_back(ring.at(0));
+                    upNeighborAddrVec.emplace_back(ring.at(1));
+                } else {
+                    upNeighborAddrVec.emplace_back(ring.at((unsigned long) (i + 1)));
+                    upNeighborAddrVec.emplace_back(ring.at((unsigned long) (i + 2)));
+                }
                 break;
             }
         }
@@ -146,12 +169,20 @@ vector<Node> MP2Node::findNeighborsDown(vector<Node> searchNode) {
 
     vector<Node> downNeighborAddrVec;
     if (ring.size() >= 3) {
-        // grab next two nodes in ring after searchNode
-        for (int i; i < ring.size(); i++) {
-            if (searchNode.at(0).getHashCode() == ring.at(i).getHashCode()) {
-                //TODO: How to loop around or back to the previous nodes when hitting the beginning of the vector?
-                downNeighborAddrVec.emplace_back(ring.at(i));
-                downNeighborAddrVec.emplace_back(ring.at(i));
+        // grab previous two nodes in ring before searchNode
+        for (int i=0; i < ring.size(); i++) {
+            if (searchNode.at(0).getHashCode() == ring.at((unsigned long) i).getHashCode()) {
+                //Loop back around the ring when hitting the beginning of vector
+                if (i == 1){
+                    downNeighborAddrVec.emplace_back(ring.at(0));
+                    downNeighborAddrVec.emplace_back(ring.at(ring.size()));
+                } else if (i == 0){
+                    downNeighborAddrVec.emplace_back(ring.at(ring.size()));
+                    downNeighborAddrVec.emplace_back(ring.at(ring.size()-1));
+                } else {
+                    downNeighborAddrVec.emplace_back(ring.at((unsigned long) (i - 1)));
+                    downNeighborAddrVec.emplace_back(ring.at((unsigned long) (i - 2)));
+                }
                 break;
             }
         }
@@ -316,7 +347,7 @@ void MP2Node::checkMessages() {
  *
  * DESCRIPTION: Find the replicas of the given keyfunction
  * 				This function is responsible for finding the replicas of a key
- * 				//TODO: NOTE! This function only tells you where a key should be, not that the key is actually in the found nodes' HT
+ * 				NOTE! This function only tells you where a key should be, not that the key is actually in the found nodes' HT
  */
 vector<Node> MP2Node::findNodes(string key) {
 	size_t pos = hashFunction(key);
@@ -379,8 +410,29 @@ int MP2Node::enqueueWrapper(void *env, char *buff, int size) {
  */
 void MP2Node::stabilizationProtocol() {
 
-    //TODO: Rerun findNeighbors to see if values differ. If different, then copy keys as needed, and update neighbor variables.
-    //TODO: For each key in this node's DHT, run findNodes(). If it doesn't return a vector with myRingPos, replicate to neighbors.
+    vector<Node> newUpNeighbors;
+    vector<Node> newDownNeighbors;
+    //Rerun findNeighbors to see if values differ. If different, then copy keys as needed, and update neighbor variables.
+    newUpNeighbors = findNeighborsUp(myRingPos);
+    sort(newUpNeighbors.begin(), newUpNeighbors.end());
+    newDownNeighbors = findNeighborsDown(myRingPos);
+    sort(newDownNeighbors.begin(), newDownNeighbors.end());
+    //See if the neighbors are the same, if not, replicate to the new ones
+    if ((newUpNeighbors.at(0).getHashCode() != hasMyReplicas.at(0).getHashCode()) | (newUpNeighbors.at(1).getHashCode() != hasMyReplicas.at(1).getHashCode())){
+        //TODO: Construct Messages
+        //Send messages
+        //Update Neighbor variable with updated ring data
+        hasMyReplicas = newUpNeighbors;
 
+    }
+    if ((newDownNeighbors.at(0).getHashCode() != haveReplicasOf.at(0).getHashCode()) | (newDownNeighbors.at(1).getHashCode() != haveReplicasOf.at(1).getHashCode())){
+        //TODO: Construct Messages
+        //Send messages
+        //Update Neighbor variable with updated ring data
+        haveReplicasOf = newDownNeighbors;
+    }
+
+    //TODO: For each key in this node's DHT, run findNodes(). If it doesn't return a vector with myRingPos, replicate to the correct node.
+    //TODO: How to access elements in a map?
 
 }

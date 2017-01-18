@@ -346,7 +346,7 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
         dataVec.clear();
 
         //See if there are any nodes in the tempMemList that the membernode doesn't have, then add them.
-        //TODO: this may need to change to a MemberListEntry assignment operator instead of a push_back
+        //this may need to change to a MemberListEntry assignment operator instead of a push_back
         if (tempMemList.size() > memberNode->memberList.size()) {
             int missingNodes = (int)(tempMemList.size()) - (int)memberNode->memberList.size();
             cout<<"Missing Nodes size: "<<missingNodes<<endl;
