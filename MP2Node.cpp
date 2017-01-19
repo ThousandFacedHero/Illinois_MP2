@@ -37,6 +37,8 @@ MP2Node::~MP2Node() {
 void MP2Node::updateRing() {
 
 	vector<Node> newMemList;
+    //vector<Node> failList;
+    //vector<Node> addList;
 	bool change = false;
 
 	 //Get the current membership list from Membership Protocol / MP1
@@ -45,7 +47,7 @@ void MP2Node::updateRing() {
     sort(newMemList.begin(), newMemList.end());
 
 	//Construct the ring, if it isn't already constructed
-    if (ring.size() < 1){
+    if (ring.size() == 0){
         ring = newMemList;
         //Find your own position in the ring
         myRingPos.emplace_back(Node(memberNode->addr));
@@ -61,18 +63,28 @@ void MP2Node::updateRing() {
         //Rings are different, set changed and call stab protocol
         change = true;
     } else {
-        //Ring size is the same, so let's iterate through to check for sure.
-        /* for (int i = 0; i < ring.size(); i++){
+        //Ring size is the same, so let's iterate through to check for changes.
+        for (int i = 0; i < ring.size(); i++){
             if (ring.at((unsigned long) i).getHashCode() != newMemList.at((unsigned long) i).getHashCode()){
                 //Rings differ, call stab
                 change = true;
                 break;
             }
         }
-         */
-        //TODO: since both lists are guaranteed to be sorted, run the "set difference" algorithm on them, and output to a vector
-        //TODO: Run a loop on the output vector to see which nodes are failures and which are adds. Then log them accordingly.
     }
+    /*
+     * Wrote this in case we need to clarify the exact fails/adds.
+    //Since both lists are guaranteed to be sorted, run the "set difference" algorithm on them, and output to a vector
+    //Diff the ring against the newMemList to find those that have failed.
+    set_difference(ring.begin(), ring.end(), newMemList.begin(), newMemList.end(), back_inserter(failList));
+    //Diff the newMemList against the ring to find those that have been added.
+    set_difference(newMemList.begin(), newMemList.end(), ring.begin(), ring.end(), back_inserter(addList));
+
+    //If the lists contain anything, there has been a change, so flag for stab.
+    if (addList.size() > 0 | failList.size() > 0) {
+        change = true;
+    }
+    */
 
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
     if (ht->currentSize() > 0 & change){
@@ -202,9 +214,7 @@ vector<Node> MP2Node::findNeighborsDown(vector<Node> searchNode) {
  */
 void MP2Node::clientCreate(string key, string value) {
 
-    //TODO: Use Message class to construct message
-    //TODO: Use findNodes function to make sure the key doesn't already exist somewhere. If not, call create on server(and it's rep neighbors) <= to the key's position(hashFunction()).
-
+    //TODO: Use Message class to construct message. Be sure to set replica type depending on a node's order in the findNodes result.
 }
 
 /**
@@ -259,7 +269,7 @@ void MP2Node::clientDelete(string key){
  */
 bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
 
-    //TODO: Note! Before creating a key, be sure they key doesn't already exist in this node's HT.
+    //TODO: Note! Before creating a key, be sure the key doesn't already exist in this node's HT.
 	// Insert key, value, replicaType into the hash table
 }
 
@@ -334,9 +344,8 @@ void MP2Node::checkMessages() {
 		string message(data, data + size);
 
 		//TODO: Process the messages from client calls, into the server functions, then reply back to client.
-        //TODO: Process the messages from server readReplies, ONLY if QUORUM(2 nodes) of replies are received(for READ), otherwise fail it.
+        //TODO: Process the return messages from server read/write Replies, ONLY if QUORUM(2 nodes) of replies are received(for READ), otherwise fail it.
         //TODO: When processing server create/update/delete, make sure the key exists first.
-        //TODO: On key creation, set replica type.
 
 	}
 
@@ -347,7 +356,7 @@ void MP2Node::checkMessages() {
  *
  * DESCRIPTION: Find the replicas of the given keyfunction
  * 				This function is responsible for finding the replicas of a key
- * 				NOTE! This function only tells you where a key should be, not that the key is actually in the found nodes' HT
+ * 				NOTE! This function only tells you where a key should be, not that the key is actually on the found nodes' HT
  */
 vector<Node> MP2Node::findNodes(string key) {
 	size_t pos = hashFunction(key);
@@ -417,22 +426,49 @@ void MP2Node::stabilizationProtocol() {
     sort(newUpNeighbors.begin(), newUpNeighbors.end());
     newDownNeighbors = findNeighborsDown(myRingPos);
     sort(newDownNeighbors.begin(), newDownNeighbors.end());
+
     //See if the neighbors are the same, if not, replicate to the new ones
     if ((newUpNeighbors.at(0).getHashCode() != hasMyReplicas.at(0).getHashCode()) | (newUpNeighbors.at(1).getHashCode() != hasMyReplicas.at(1).getHashCode())){
-        //TODO: Construct Messages
-        //Send messages
         //Update Neighbor variable with updated ring data
         hasMyReplicas = newUpNeighbors;
-
     }
+
     if ((newDownNeighbors.at(0).getHashCode() != haveReplicasOf.at(0).getHashCode()) | (newDownNeighbors.at(1).getHashCode() != haveReplicasOf.at(1).getHashCode())){
-        //TODO: Construct Messages
-        //Send messages
         //Update Neighbor variable with updated ring data
         haveReplicasOf = newDownNeighbors;
     }
 
-    //TODO: For each key in this node's DHT, run findNodes(). If it doesn't return a vector with myRingPos, replicate to the correct node.
-    //TODO: How to access elements in a map?
+    //For each key in this node's DHT, run findNodes(). If it doesn't return a vector with myRingPos, replicate to the correct node.
+    map<string, string>::iterator it = ht->hashTable.begin();
+    while (it != ht->hashTable.end()){
+        string keyString = it->first;
+        Entry checkValue = Entry(it->second);
+        vector<Node> keyLocations = findNodes(keyString);
+
+        if (checkValue.replica == PRIMARY & keyLocations.at(0).getHashCode() != myRingPos.at(0).getHashCode()) {
+            //TODO: This node is no longer the primary for that key, replicate to that node and it's neighbors.
+            //Emulnet format: ENsend(Address *myaddr, Address *toaddr, string data)
+            //Message format: Message(int _transID, Address _fromAddr, MessageType _type, string _key, string _value, ReplicaType _replica)
+
+            //Replicate to new primary
+            //Message newOwner = Message();
+
+            //Replicate to other nodes
+            if (keyLocations.at(1).getHashCode() != myRingPos.at(0).getHashCode()){
+                //Replcate to new secondary
+                //Send message to new replicant
+            } else if (keyLocations.at(2).getHashCode() != myRingPos.at(0).getHashCode()){
+                //Replicate to new tertiary
+                //Send message to new replicant
+            } else if (keyLocations.at(1).getHashCode() == myRingPos.at(0).getHashCode()) {
+                //This node is the new secondary for that key, just update the type.
+            } else {
+                //Regardless of neighbor location, this node is set to tertiary.
+            }
+        }
+        it++;
+    }
+
+    //TODO: Now replicate all primary keys out to upNeighbors
 
 }
