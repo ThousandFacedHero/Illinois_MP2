@@ -346,7 +346,7 @@ void MP2Node::checkMessages() {
 		//TODO: Process the messages from client calls, into the server functions, then reply back to client.
         //TODO: Process the return messages from server read/write Replies, ONLY if QUORUM(2 nodes) of replies are received(for READ), otherwise fail it.
         //TODO: When processing server create/update/delete, make sure the key exists first.
-
+        //TODO: Create vector to store transaction ID and it's count. Cleanup vector after timeout. Disregard transactions after timeout for specific transID. Cleanup after count hits 3 too.
 	}
 
 }
@@ -455,7 +455,7 @@ void MP2Node::stabilizationProtocol() {
 
             //Replicate to other nodes
             if (keyLocations.at(1).getHashCode() != myRingPos.at(0).getHashCode()){
-                //Replcate to new secondary
+                //Replicate to new secondary
                 //Send message to new replicant
             } else if (keyLocations.at(2).getHashCode() != myRingPos.at(0).getHashCode()){
                 //Replicate to new tertiary
