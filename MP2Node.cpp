@@ -15,6 +15,7 @@ MP2Node::MP2Node(Member *memberNode, Params *par, EmulNet * emulNet, Log * log, 
 	this->log = log;
 	ht = new HashTable();
 	this->memberNode->addr = *address;
+    //TODO: initialize the replyqueue
 }
 
 /**
@@ -23,6 +24,7 @@ MP2Node::MP2Node(Member *memberNode, Params *par, EmulNet * emulNet, Log * log, 
 MP2Node::~MP2Node() {
 	delete ht;
 	delete memberNode;
+    //todo: delete the replyqueue
 }
 
 /**
@@ -325,14 +327,8 @@ bool MP2Node::deletekey(string key) {
  */
 void MP2Node::checkMessages() {
 
-    //TODO
-
 	char * data;
 	int size;
-
-	/*
-	 * Declare your local variables here
-	 */
 
 	// dequeue all messages and handle them
 	while ( !memberNode->mp2q.empty() ) {
@@ -346,7 +342,7 @@ void MP2Node::checkMessages() {
 		//TODO: Process the messages from client calls, into the server functions, then reply back to client.
         //TODO: Process the return messages from server read/write Replies, ONLY if QUORUM(2 nodes) of replies are received(for READ), otherwise fail it.
         //TODO: When processing server create/update/delete, make sure the key exists first.
-        //TODO: Create vector to store transaction ID and it's count. Cleanup vector after timeout. Disregard transactions after timeout for specific transID. Cleanup after count hits 3 too.
+        //TODO: Create vector(of replyQueue) to store transaction ID and it's count, of only reply/readreply type messages. Cleanup vector after timeout. Disregard transactions after timeout for specific transID. Cleanup after count hits 3 too.
 	}
 
 }
@@ -371,7 +367,7 @@ vector<Node> MP2Node::findNodes(string key) {
 		else {
 			// go through the ring until pos <= node
 			for (int i=1; i<ring.size(); i++){
-				Node addr = ring.at(i);
+				Node addr = ring.at((unsigned long) i);
 				if (pos <= addr.getHashCode()) {
 					addr_vec.emplace_back(addr);
 					addr_vec.emplace_back(ring.at((i+1)%ring.size()));

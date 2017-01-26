@@ -49,6 +49,8 @@ private:
 	EmulNet * emulNet;
 	// Object of Log
 	Log * log;
+    // Message timeout counter
+    int timeout = 0;
 
 public:
 	MP2Node(Member *memberNode, Params *par, EmulNet *emulNet, Log *log, Address *addressOfMember);
@@ -93,5 +95,8 @@ public:
 
 	~MP2Node();
 };
+//todo: build reply queue class with transID, timestamp, value
+class replyQueue {
 
+};
 #endif /* MP2NODE_H_ */
