@@ -20,6 +20,11 @@
 #include "Queue.h"
 
 /**
+ * Macros
+ */
+#define MFAIL 10
+
+/**
  * CLASS NAME: MP2Node
  *
  * DESCRIPTION: This class encapsulates all the key-value store functionality
@@ -49,8 +54,6 @@ private:
 	EmulNet * emulNet;
 	// Object of Log
 	Log * log;
-    // Message timeout counter
-    int timeout = 0;
 
 public:
 	MP2Node(Member *memberNode, Params *par, EmulNet *emulNet, Log *log, Address *addressOfMember);
