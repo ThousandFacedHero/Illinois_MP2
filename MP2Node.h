@@ -54,6 +54,8 @@ private:
 	EmulNet * emulNet;
 	// Object of Log
 	Log * log;
+	//transactionID
+	int trans_id = 0;
 
 public:
 	MP2Node(Member *memberNode, Params *par, EmulNet *emulNet, Log *log, Address *addressOfMember);

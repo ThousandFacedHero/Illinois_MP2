@@ -15,7 +15,6 @@ MP2Node::MP2Node(Member *memberNode, Params *par, EmulNet * emulNet, Log * log, 
 	this->log = log;
 	ht = new HashTable();
 	this->memberNode->addr = *address;
-    //TODO: initialize the replyqueue
 }
 
 /**
@@ -24,7 +23,6 @@ MP2Node::MP2Node(Member *memberNode, Params *par, EmulNet * emulNet, Log * log, 
 MP2Node::~MP2Node() {
 	delete ht;
 	delete memberNode;
-    //todo: delete the replyqueue
 }
 
 /**
@@ -215,8 +213,26 @@ vector<Node> MP2Node::findNeighborsDown(vector<Node> searchNode) {
  * 				3) Sends a message to the replica
  */
 void MP2Node::clientCreate(string key, string value) {
+    //Find the Nodes to send this key to.
+    vector<Node> targetNodes = findNodes(key);
+    if (targetNodes.size() > 0) {
+        int curTransId = ++trans_id;
 
-    //TODO: Use Message class to construct message. Be sure to set replica type depending on a node's order in the findNodes result.
+        //Construct and Send to the primary node
+        Message primaryMessage(curTransId, memberNode->addr, CREATE, key, value, PRIMARY);
+        emulNet->ENsend(&memberNode->addr, &targetNodes.at(0).nodeAddress, primaryMessage.toString());
+
+        if (targetNodes.size() > 1) {
+            //Construct and send to the secondary node
+            Message secondaryMessage(curTransId, memberNode->addr, CREATE, key, value, SECONDARY);
+            emulNet->ENsend(&memberNode->addr, &targetNodes.at(1).nodeAddress, secondaryMessage.toString());
+        }
+        if (targetNodes.size() > 2) {
+            //Construct and send to the tertiary node
+            Message tertiaryMessage(curTransId, memberNode->addr, CREATE, key, value, TERTIARY);
+            emulNet->ENsend(&memberNode->addr, &targetNodes.at(2).nodeAddress, tertiaryMessage.toString());
+        }
+    }
 }
 
 /**
@@ -229,8 +245,27 @@ void MP2Node::clientCreate(string key, string value) {
  * 				3) Sends a message to the replica
  */
 void MP2Node::clientRead(string key){
+    //Find the Nodes to for this key.
+    vector<Node> targetNodes = findNodes(key);
+    if (targetNodes.size() > 0) {
+        //Increment the trans_id
+        int curTransId = ++trans_id;
 
-    //TODO
+        //Construct and Send to the primary node
+        Message primaryMessage(curTransId, memberNode->addr, READ, key);
+        emulNet->ENsend(&memberNode->addr, &targetNodes.at(0).nodeAddress, primaryMessage.toString());
+
+        if (targetNodes.size() > 1) {
+            //Construct and send to the secondary node
+            Message secondaryMessage(curTransId, memberNode->addr, READ, key);
+            emulNet->ENsend(&memberNode->addr, &targetNodes.at(1).nodeAddress, secondaryMessage.toString());
+        }
+        if (targetNodes.size() > 2) {
+            //Construct and send to the tertiary node
+            Message tertiaryMessage(curTransId, memberNode->addr, READ, key);
+            emulNet->ENsend(&memberNode->addr, &targetNodes.at(2).nodeAddress, tertiaryMessage.toString());
+        }
+    }
 }
 
 /**
@@ -243,8 +278,26 @@ void MP2Node::clientRead(string key){
  * 				3) Sends a message to the replica
  */
 void MP2Node::clientUpdate(string key, string value){
+    //Find the Nodes to send this key to.
+    vector<Node> targetNodes = findNodes(key);
+    if (targetNodes.size() > 0) {
+        int curTransId = ++trans_id;
 
-    //TODO
+        //Construct and Send to the primary node
+        Message primaryMessage(curTransId, memberNode->addr, UPDATE, key, value, PRIMARY);
+        emulNet->ENsend(&memberNode->addr, &targetNodes.at(0).nodeAddress, primaryMessage.toString());
+
+        if (targetNodes.size() > 1) {
+            //Construct and send to the secondary node
+            Message secondaryMessage(curTransId, memberNode->addr, UPDATE, key, value, SECONDARY);
+            emulNet->ENsend(&memberNode->addr, &targetNodes.at(1).nodeAddress, secondaryMessage.toString());
+        }
+        if (targetNodes.size() > 2) {
+            //Construct and send to the tertiary node
+            Message tertiaryMessage(curTransId, memberNode->addr, UPDATE, key, value, TERTIARY);
+            emulNet->ENsend(&memberNode->addr, &targetNodes.at(2).nodeAddress, tertiaryMessage.toString());
+        }
+    }
 }
 
 /**
@@ -257,8 +310,26 @@ void MP2Node::clientUpdate(string key, string value){
  * 				3) Sends a message to the replica
  */
 void MP2Node::clientDelete(string key){
+    //Find the Nodes to delete from.
+    vector<Node> targetNodes = findNodes(key);
+    if (targetNodes.size() > 0) {
+        int curTransId = ++trans_id;
 
-    //TODO
+        //Construct and Send to the primary node
+        Message primaryMessage(curTransId, memberNode->addr, DELETE, key);
+        emulNet->ENsend(&memberNode->addr, &targetNodes.at(0).nodeAddress, primaryMessage.toString());
+
+        if (targetNodes.size() > 1) {
+            //Construct and send to the secondary node
+            Message secondaryMessage(curTransId, memberNode->addr, DELETE, key);
+            emulNet->ENsend(&memberNode->addr, &targetNodes.at(1).nodeAddress, secondaryMessage.toString());
+        }
+        if (targetNodes.size() > 2) {
+            //Construct and send to the tertiary node
+            Message tertiaryMessage(curTransId, memberNode->addr, DELETE, key);
+            emulNet->ENsend(&memberNode->addr, &targetNodes.at(2).nodeAddress, tertiaryMessage.toString());
+        }
+    }
 }
 
 /**
@@ -270,9 +341,34 @@ void MP2Node::clientDelete(string key){
  * 			   	2) Return true or false based on success or failure
  */
 bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
+    //Insert key, value, replicaType into the hash table
+    bool keyExists = false;
+    bool keyResponse = false;
+    Entry newEntryVal(value, par->globaltime, replica);
 
-    //TODO: Note! Before creating a key, be sure the key doesn't already exist in this node's HT.
-	// Insert key, value, replicaType into the hash table
+    //Check hashtable for the key before creating.
+    map<string, string>::iterator it = ht->hashTable.begin();
+    while (it != ht->hashTable.end()) {
+        string keyString = it->first;
+        Entry checkValue = Entry(it->second);
+        if (keyString == key){
+            //This key already exists. We need to update instead of create.
+            keyExists = true;
+            break;
+        }
+        it++;
+    }
+
+    //Create or update the key.
+    if (!keyExists){
+        //Create
+        keyResponse = ht->create(key, newEntryVal.convertToString());
+    } else {
+        //Update
+        keyResponse = ht->update(key, newEntryVal.convertToString());
+    }
+
+    return keyResponse;
 }
 
 /**
