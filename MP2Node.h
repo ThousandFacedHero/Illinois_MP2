@@ -100,7 +100,7 @@ public:
 
 	~MP2Node();
 };
-//todo: build reply queue class with transID, timestamp, value
+//todo: build reply queue class with transID, timestamp, value, replyCount
 class replyQueue {
 
 };

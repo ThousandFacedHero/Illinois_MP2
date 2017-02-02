@@ -343,14 +343,13 @@ void MP2Node::clientDelete(string key){
 bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
     //Insert key, value, replicaType into the hash table
     bool keyExists = false;
-    bool keyResponse = false;
+    bool keyResponse;
     Entry newEntryVal(value, par->globaltime, replica);
 
     //Check hashtable for the key before creating.
     map<string, string>::iterator it = ht->hashTable.begin();
     while (it != ht->hashTable.end()) {
         string keyString = it->first;
-        Entry checkValue = Entry(it->second);
         if (keyString == key){
             //This key already exists. We need to update instead of create.
             keyExists = true;
@@ -380,9 +379,31 @@ bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
  * 			    2) Return value
  */
 string MP2Node::readKey(string key) {
+    //Read key from local hash table and return value
+    bool keyExists = false;
+    string keyResponse;
 
-    //TODO
-	// Read key from local hash table and return value
+    //Check hashtable for the key.
+    map<string, string>::iterator it = ht->hashTable.begin();
+    while (it != ht->hashTable.end()) {
+        string keyString = it->first;
+        if (keyString == key){
+            //This key does exists.
+            keyExists = true;
+            break;
+        }
+        it++;
+    }
+
+    //Return the key value if it exists.
+    if (keyExists){
+        keyResponse = ht->read(key);
+    } else {
+        //Key doesn't exist, return 0.
+        return 0;
+    }
+
+    return keyResponse;
 }
 
 /**
@@ -394,9 +415,30 @@ string MP2Node::readKey(string key) {
  * 				2) Return true or false based on success or failure
  */
 bool MP2Node::updateKeyValue(string key, string value, ReplicaType replica) {
+    //Update key in local hash table and return true or false
+    bool keyExists = false;
+    bool keyResponse = false;
+    Entry newEntryVal(value, par->globaltime, replica);
 
-    //TODO
-	// Update key in local hash table and return true or false
+    //Check hashtable for the key before creating.
+    map<string, string>::iterator it = ht->hashTable.begin();
+    while (it != ht->hashTable.end()) {
+        string keyString = it->first;
+        if (keyString == key){
+            //This key already exists. Time to update.
+            keyExists = true;
+            break;
+        }
+        it++;
+    }
+
+    //Update key or return default of false.
+    if (keyExists){
+        //Update
+        keyResponse = ht->update(key, newEntryVal.convertToString());
+    }
+
+    return keyResponse;
 }
 
 /**
@@ -408,9 +450,30 @@ bool MP2Node::updateKeyValue(string key, string value, ReplicaType replica) {
  * 				2) Return true or false based on success or failure
  */
 bool MP2Node::deletekey(string key) {
+    //Delete the key from the local hash table
+    bool keyExists = false;
+    bool keyResponse = false;
 
-    //TODO
-	// Delete the key from the local hash table
+    //Check hashtable for the key before creating.
+    map<string, string>::iterator it = ht->hashTable.begin();
+    while (it != ht->hashTable.end()) {
+        string keyString = it->first;
+        Entry checkValue = Entry(it->second);
+        if (keyString == key){
+            //This key exists. Time to delete.
+            keyExists = true;
+            break;
+        }
+        it++;
+    }
+
+    //Delete key or return default of false.
+    if (keyExists){
+        //Delete
+        keyResponse = ht->deleteKey(key);
+    }
+
+    return keyResponse;
 }
 
 /**
@@ -438,7 +501,9 @@ void MP2Node::checkMessages() {
 		//TODO: Process the messages from client calls, into the server functions, then reply back to client.
         //TODO: Process the return messages from server read/write Replies, ONLY if QUORUM(2 nodes) of replies are received(for READ), otherwise fail it.
         //TODO: When processing server create/update/delete, make sure the key exists first.
-        //TODO: Create vector(of replyQueue) to store transaction ID and it's count, of only reply/readreply type messages. Cleanup vector after timeout. Disregard transactions after timeout for specific transID. Cleanup after count hits 3 too.
+        //TODO: Create vector(of replyQueue) to store transaction ID and it's count, of only reply/readreply type messages.
+        //TODO: Cleanup vector after timeout. Disregard transactions after timeout for specific transID. Cleanup after count hits 3 too.
+        //TODO: server readKey response can be 0, indicating that the key doesn't exist.
 	}
 
 }
@@ -516,13 +581,15 @@ void MP2Node::stabilizationProtocol() {
     //Rerun findNeighbors to see if values differ. If different, then copy keys as needed, and update neighbor variables.
     newUpNeighbors = findNeighborsUp(myRingPos);
     sort(newUpNeighbors.begin(), newUpNeighbors.end());
+    bool upNeighborChanged = false;
     newDownNeighbors = findNeighborsDown(myRingPos);
     sort(newDownNeighbors.begin(), newDownNeighbors.end());
 
-    //See if the neighbors are the same, if not, replicate to the new ones
+    //See if the neighbors are the same, if not, set new ones
     if ((newUpNeighbors.at(0).getHashCode() != hasMyReplicas.at(0).getHashCode()) | (newUpNeighbors.at(1).getHashCode() != hasMyReplicas.at(1).getHashCode())){
         //Update Neighbor variable with updated ring data
         hasMyReplicas = newUpNeighbors;
+        upNeighborChanged = true;
     }
 
     if ((newDownNeighbors.at(0).getHashCode() != haveReplicasOf.at(0).getHashCode()) | (newDownNeighbors.at(1).getHashCode() != haveReplicasOf.at(1).getHashCode())){
@@ -537,30 +604,75 @@ void MP2Node::stabilizationProtocol() {
         Entry checkValue = Entry(it->second);
         vector<Node> keyLocations = findNodes(keyString);
 
-        if (checkValue.replica == PRIMARY & keyLocations.at(0).getHashCode() != myRingPos.at(0).getHashCode()) {
-            //TODO: This node is no longer the primary for that key, replicate to that node and it's neighbors.
-            //Emulnet format: ENsend(Address *myaddr, Address *toaddr, string data)
-            //Message format: Message(int _transID, Address _fromAddr, MessageType _type, string _key, string _value, ReplicaType _replica)
+        if (checkValue.replica == PRIMARY) {
+            //This node is primary for this key, now see if it should be.
+            if (keyLocations.at(0).getHashCode() != myRingPos.at(0).getHashCode()) {
+                //This node is no longer the primary for that key, replicate to that node and it's neighbors.
+                //Get the next trans_id
+                int curTransId = ++trans_id;
 
-            //Replicate to new primary
-            //Message newOwner = Message();
+                //Construct the message and send to new primary
+                Message newPrimaryMessage(curTransId, memberNode->addr, CREATE, keyString, checkValue.value, PRIMARY);
+                emulNet->ENsend(&memberNode->addr, &keyLocations.at(0).nodeAddress, newPrimaryMessage.toString());
 
-            //Replicate to other nodes
-            if (keyLocations.at(1).getHashCode() != myRingPos.at(0).getHashCode()){
-                //Replicate to new secondary
-                //Send message to new replicant
-            } else if (keyLocations.at(2).getHashCode() != myRingPos.at(0).getHashCode()){
-                //Replicate to new tertiary
-                //Send message to new replicant
-            } else if (keyLocations.at(1).getHashCode() == myRingPos.at(0).getHashCode()) {
-                //This node is the new secondary for that key, just update the type.
-            } else {
-                //Regardless of neighbor location, this node is set to tertiary.
+                //Replicate to other nodes
+                if (keyLocations.at(1).getHashCode() != myRingPos.at(0).getHashCode()) {
+                    //Replicate to new secondary
+                    Message newSecondaryMessage(curTransId, memberNode->addr, CREATE, keyString, checkValue.value,
+                                             SECONDARY);
+                    emulNet->ENsend(&memberNode->addr, &keyLocations.at(0).nodeAddress, newSecondaryMessage.toString());
+
+                } else if (keyLocations.at(2).getHashCode() != myRingPos.at(0).getHashCode()) {
+                    //Replicate to new tertiary
+                    Message newTertiaryMessage(curTransId, memberNode->addr, CREATE, keyString, checkValue.value,
+                                            TERTIARY);
+                    emulNet->ENsend(&memberNode->addr, &keyLocations.at(0).nodeAddress, newTertiaryMessage.toString());
+
+                } else if (keyLocations.at(1).getHashCode() == myRingPos.at(0).getHashCode()) {
+                    //This node is the new secondary for that key, just update the type.
+                    checkValue.replica = SECONDARY;
+                    ht->update(keyString, checkValue.convertToString());
+
+                } else {
+                    //Regardless of neighbor location, this node is set to tertiary.
+                    checkValue.replica = TERTIARY;
+                    ht->update(keyString, checkValue.convertToString());
+                }
+            }
+            //Now that the replica types are set correctly, broadcast out the primary keys to neighbors, if they changed.
+            if (upNeighborChanged){
+                //Grab next trans_id
+                int nxtTransId = ++trans_id;
+
+                if (hasMyReplicas.size() > 1) {
+                    //Construct and send to the secondary node
+                    Message secondaryMessage(nxtTransId, memberNode->addr, CREATE, keyString);
+                    emulNet->ENsend(&memberNode->addr, &hasMyReplicas.at(0).nodeAddress, secondaryMessage.toString());
+                }
+                if (hasMyReplicas.size() > 2) {
+                    //Construct and send to the tertiary node
+                    Message tertiaryMessage(nxtTransId, memberNode->addr, CREATE, keyString);
+                    emulNet->ENsend(&memberNode->addr, &hasMyReplicas.at(1).nodeAddress, tertiaryMessage.toString());
+                }
             }
         }
         it++;
     }
-
-    //TODO: Now replicate all primary keys out to upNeighbors
-
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
