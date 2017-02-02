@@ -22,7 +22,7 @@
 /**
  * Macros
  */
-#define MFAIL 10
+#define MFAIL 15
 
 /**
  * CLASS NAME: MP2Node
@@ -56,6 +56,8 @@ private:
 	Log * log;
 	//transactionID
 	int trans_id = 0;
+    //Queue for read/write replies, to obtain quorum of responses.
+    vector<replyQueue> quorumQueue;
 
 public:
 	MP2Node(Member *memberNode, Params *par, EmulNet *emulNet, Log *log, Address *addressOfMember);
@@ -98,10 +100,29 @@ public:
 	// stabilization protocol - handle multiple failures
 	void stabilizationProtocol();
 
+    // cleanup replyQueue
+    void cleanRepQueue();
+
 	~MP2Node();
 };
-//todo: build reply queue class with transID, timestamp, value, replyCount
+
+/** CLASS NAME: replyQueue
+ * Reply queue class with transID, timestamp, value, replyCount.
+ * For use in reply queue vector.
+ */
 class replyQueue {
+public:
+    int transID;
+    long timestamp;
+    string msgValue;
+    int replyCount;
+    bool msgFailed;
+
+    replyQueue();
+    replyQueue(int transID, long timestamp, string msgValue, int replyCount, bool msgFailed);
+    virtual ~replyQueue();
+    replyQueue(const replyQueue& another);
+    replyQueue& operator=(const replyQueue& another);
 
 };
 #endif /* MP2NODE_H_ */

@@ -485,9 +485,17 @@ bool MP2Node::deletekey(string key) {
  * 				2) Handles the messages according to message types
  */
 void MP2Node::checkMessages() {
-
+    /*TODO
+     *Process the messages from client calls, into the server functions, then reply back to client.
+     * Process the return messages from server read/write Replies, ONLY if QUORUM(2 nodes) of replies are received(for READ), otherwise fail it.
+     * When processing server create/update/delete, make sure the key exists first.
+     * Create vector(of replyQueue) to store transaction ID and it's count, of only reply/readreply type messages.
+     * Cleanup vector after timeout. Disregard transactions after timeout for specific transID. Cleanup after count hits 3 too.
+     * server readKey response can be 0, indicating that the key doesn't exist.
+     */
 	char * data;
 	int size;
+    bool msgResult = false;
 
 	// dequeue all messages and handle them
 	while ( !memberNode->mp2q.empty() ) {
@@ -495,17 +503,48 @@ void MP2Node::checkMessages() {
 		data = (char *)memberNode->mp2q.front().elt;
 		size = memberNode->mp2q.front().size;
 		memberNode->mp2q.pop();
-
+        //Convert it to a string
 		string message(data, data + size);
+        //Convert that string to a Message
+        Message incMessage(message);
 
-		//TODO: Process the messages from client calls, into the server functions, then reply back to client.
-        //TODO: Process the return messages from server read/write Replies, ONLY if QUORUM(2 nodes) of replies are received(for READ), otherwise fail it.
-        //TODO: When processing server create/update/delete, make sure the key exists first.
-        //TODO: Create vector(of replyQueue) to store transaction ID and it's count, of only reply/readreply type messages.
-        //TODO: Cleanup vector after timeout. Disregard transactions after timeout for specific transID. Cleanup after count hits 3 too.
-        //TODO: server readKey response can be 0, indicating that the key doesn't exist.
+        if(incMessage.type == CREATE){
+            //Call server create
+            msgResult = createKeyValue(incMessage.key, incMessage.value, incMessage.replica);
+            //Send result as reply
+            Message createRepMsg(incMessage.transID, memberNode->addr, REPLY, msgResult);
+            emulNet->ENsend(&memberNode->addr, &incMessage.fromAddr, createRepMsg.toString());
+        }
+
+        if(incMessage.type == READ){
+            //Call server read
+            //Send result as readReply
+        }
+
+        if(incMessage.type == UPDATE){
+            //Call server update
+        }
+
+        if(incMessage.type == DELETE){
+            //Call server delete
+        }
+
+        if(incMessage.type == REPLY){
+            //Process write reply into reply queue
+            //If write reply transID exists, increment count, or process if quorum achieved, then log success/fail.
+        }
+
+        if(incMessage.type == READREPLY){
+            //Process write reply into reply queue
+            //If write reply transID exists, increment count, or process if quorum achieved, then log success/fail.
+            //Compare reply values
+        }
 	}
 
+    //Now run the cleanup on the replyQueue if time calls for it.
+    if (memberNode->pingCounter % 5 == 0){
+        cleanRepQueue();
+    }
 }
 
 /**
@@ -556,7 +595,7 @@ bool MP2Node::recvLoop() {
     }
 }
 
-/**
+/**emulNet->ENsend(&memberNode->addr, &hasMyReplicas.at(0).nodeAddress, secondaryMessage.toString());
  * FUNCTION NAME: enqueueWrapper
  *
  * DESCRIPTION: Enqueue the message from Emulnet into the queue of MP2Node
@@ -639,8 +678,9 @@ void MP2Node::stabilizationProtocol() {
                     ht->update(keyString, checkValue.convertToString());
                 }
             }
-            //Now that the replica types are set correctly, broadcast out the primary keys to neighbors, if they changed.
-            if (upNeighborChanged){
+
+            //Now that the replica types are set correctly, broadcast out the primary key to neighbors, if they changed.
+            if (upNeighborChanged & checkValue.replica == PRIMARY){
                 //Grab next trans_id
                 int nxtTransId = ++trans_id;
 
@@ -657,8 +697,73 @@ void MP2Node::stabilizationProtocol() {
             }
         }
         it++;
+        keyLocations.clear();
     }
 }
+
+/**
+ * FUNCTION NAME: cleanRepQueue
+ *
+ * DESCRIPTION: This cleans the replyQueue up by failing any stale messages.
+ *              Stale messages are those that have a globaltime - timestamp > MFAIL
+ */
+void MP2Node::cleanRepQueue() {
+    for (int i=0; i < quorumQueue.size(); i++){
+        if (par->globaltime - quorumQueue.at((unsigned long) i).timestamp > MFAIL){
+            //Passed fail time, fail the message.
+            quorumQueue.at((unsigned long) i).msgFailed = true;
+            //todo: log the failure.
+        }
+        //if (quorumQueue.at(i).replyCount == 3){
+            //todo: This message has fully succeeded, delete it and re-size "if size becomes a performance issue."
+        //}
+    }
+}
+
+/**
+ * constructor
+ */
+replyQueue::replyQueue() {}
+
+/**
+ * constructor
+ */
+replyQueue::replyQueue(int transID, long timestamp, string msgValue, int replyCount, bool msgFailed) {
+    this->transID = transID;
+    this->timestamp = timestamp;
+    this->msgValue = msgValue;
+    this->replyCount = replyCount;
+    this->msgFailed = msgFailed;
+}
+
+/**
+ * Destructor
+ */
+replyQueue::~replyQueue() {}
+
+/**
+ * copy constructor
+ */
+replyQueue::replyQueue(const replyQueue& another) {
+    this->transID = another.transID;
+    this->timestamp = another.timestamp;
+    this->msgValue = another.msgValue;
+    this->replyCount = another.replyCount;
+    this->msgFailed = another.msgFailed;
+}
+
+/**
+ * Assignment operator overloading
+ */
+replyQueue& replyQueue::operator=(const replyQueue& another) {
+    this->transID = another.transID;
+    this->timestamp = another.timestamp;
+    this->msgValue = another.msgValue;
+    this->replyCount = another.replyCount;
+    this->msgFailed = another.msgFailed;
+    return *this;
+}
+
 
 
 
