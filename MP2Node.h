@@ -116,10 +116,10 @@ public:
     long timestamp;
     string msgValue;
     int replyCount;
-    bool msgFailed;
+    int msgFailed;
 
     replyQueue();
-    replyQueue(int transID, long timestamp, string msgValue, int replyCount, bool msgFailed);
+    replyQueue(int transID, long timestamp, string msgValue, int replyCount, int msgFailed);
     virtual ~replyQueue();
     replyQueue(const replyQueue& another);
     replyQueue& operator=(const replyQueue& another);

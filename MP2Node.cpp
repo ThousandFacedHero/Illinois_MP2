@@ -367,6 +367,7 @@ bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
         keyResponse = ht->update(key, newEntryVal.convertToString());
     }
 
+    //todo: store the message in the queue
     return keyResponse;
 }
 
@@ -495,7 +496,9 @@ void MP2Node::checkMessages() {
      */
 	char * data;
 	int size;
-    bool msgResult = false;
+    bool boolMsgResult;
+    bool inQueue = false;
+    string strMsgResult;
 
 	// dequeue all messages and handle them
 	while ( !memberNode->mp2q.empty() ) {
@@ -510,28 +513,54 @@ void MP2Node::checkMessages() {
 
         if(incMessage.type == CREATE){
             //Call server create
-            msgResult = createKeyValue(incMessage.key, incMessage.value, incMessage.replica);
+            boolMsgResult = createKeyValue(incMessage.key, incMessage.value, incMessage.replica);
             //Send result as reply
-            Message createRepMsg(incMessage.transID, memberNode->addr, REPLY, msgResult);
+            Message createRepMsg(incMessage.transID, memberNode->addr, REPLY, boolMsgResult);
             emulNet->ENsend(&memberNode->addr, &incMessage.fromAddr, createRepMsg.toString());
         }
 
         if(incMessage.type == READ){
             //Call server read
+            strMsgResult = readKey(incMessage.key);
             //Send result as readReply
+            Message createRepMsg(incMessage.transID, memberNode->addr, READREPLY, strMsgResult);
+            emulNet->ENsend(&memberNode->addr, &incMessage.fromAddr, createRepMsg.toString());
         }
 
         if(incMessage.type == UPDATE){
             //Call server update
+            boolMsgResult = updateKeyValue(incMessage.key, incMessage.value, incMessage.replica);
+            //Send result as reply
+            Message createRepMsg(incMessage.transID, memberNode->addr, REPLY, boolMsgResult);
+            emulNet->ENsend(&memberNode->addr, &incMessage.fromAddr, createRepMsg.toString());
         }
 
         if(incMessage.type == DELETE){
             //Call server delete
+            boolMsgResult = deletekey(incMessage.key);
+            //Send result as reply
+            Message createRepMsg(incMessage.transID, memberNode->addr, REPLY, boolMsgResult);
+            emulNet->ENsend(&memberNode->addr, &incMessage.fromAddr, createRepMsg.toString());
         }
 
         if(incMessage.type == REPLY){
             //Process write reply into reply queue
             //If write reply transID exists, increment count, or process if quorum achieved, then log success/fail.
+            //Loop through the quorumQueue to see if this transID exists, then do magic.
+            for (int i=0; i<quorumQueue.size(); i++){
+                if (incMessage.transID == quorumQueue.at((unsigned long) i).transID){
+                    //This message exists in the queue, run checks on it.
+                    inQueue = true;
+                    if (quorumQueue.at(i).replyCount == 2){
+                        //this is the last reply for this transaction, log the final result. Result is success as long as msgFailed <=1.
+                        //todo: log result
+                        break;
+                    } else {
+                        //This isn't the final reply for this transaction, store it in the queue.
+
+                    }
+                }
+            }
         }
 
         if(incMessage.type == READREPLY){
@@ -711,7 +740,7 @@ void MP2Node::cleanRepQueue() {
     for (int i=0; i < quorumQueue.size(); i++){
         if (par->globaltime - quorumQueue.at((unsigned long) i).timestamp > MFAIL){
             //Passed fail time, fail the message.
-            quorumQueue.at((unsigned long) i).msgFailed = true;
+            quorumQueue.at((unsigned long) i).msgFailed = quorumQueue.at((unsigned long) i).msgFailed +2;
             //todo: log the failure.
         }
         //if (quorumQueue.at(i).replyCount == 3){
@@ -728,7 +757,7 @@ replyQueue::replyQueue() {}
 /**
  * constructor
  */
-replyQueue::replyQueue(int transID, long timestamp, string msgValue, int replyCount, bool msgFailed) {
+replyQueue::replyQueue(int transID, long timestamp, string msgValue, int replyCount, int msgFailed) {
     this->transID = transID;
     this->timestamp = timestamp;
     this->msgValue = msgValue;
