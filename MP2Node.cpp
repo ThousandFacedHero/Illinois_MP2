@@ -232,6 +232,9 @@ void MP2Node::clientCreate(string key, string value) {
             Message tertiaryMessage(curTransId, memberNode->addr, CREATE, key, value, TERTIARY);
             emulNet->ENsend(&memberNode->addr, &targetNodes.at(2).nodeAddress, tertiaryMessage.toString());
         }
+
+        //Store the message in the queue
+        quorumQueue.emplace_back(replyQueue(curTransId, par->globaltime, to_string(0), 0, false, 0, DELETE, key, value));
     }
 }
 
@@ -265,6 +268,9 @@ void MP2Node::clientRead(string key){
             Message tertiaryMessage(curTransId, memberNode->addr, READ, key);
             emulNet->ENsend(&memberNode->addr, &targetNodes.at(2).nodeAddress, tertiaryMessage.toString());
         }
+
+        //Store the message in the queue
+        quorumQueue.emplace_back(replyQueue(curTransId, par->globaltime, to_string(0), 0, false, 0, READ, key, to_string(0)));
     }
 }
 
@@ -297,6 +303,9 @@ void MP2Node::clientUpdate(string key, string value){
             Message tertiaryMessage(curTransId, memberNode->addr, UPDATE, key, value, TERTIARY);
             emulNet->ENsend(&memberNode->addr, &targetNodes.at(2).nodeAddress, tertiaryMessage.toString());
         }
+
+        //Store the message in the queue
+        quorumQueue.emplace_back(replyQueue(curTransId, par->globaltime, to_string(0), 0, false, 0, UPDATE, key, value));
     }
 }
 
@@ -329,6 +338,9 @@ void MP2Node::clientDelete(string key){
             Message tertiaryMessage(curTransId, memberNode->addr, DELETE, key);
             emulNet->ENsend(&memberNode->addr, &targetNodes.at(2).nodeAddress, tertiaryMessage.toString());
         }
+
+        //Store the message in the queue
+        quorumQueue.emplace_back(replyQueue(curTransId, par->globaltime, to_string(0), 0, false, 0, DELETE, key, to_string(0)));
     }
 }
 
@@ -367,7 +379,6 @@ bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
         keyResponse = ht->update(key, newEntryVal.convertToString());
     }
 
-    //todo: store the message in the queue
     return keyResponse;
 }
 
@@ -450,7 +461,7 @@ bool MP2Node::updateKeyValue(string key, string value, ReplicaType replica) {
  * 				1) Delete the key from the local hash table
  * 				2) Return true or false based on success or failure
  */
-bool MP2Node::deletekey(string key) {
+bool MP2Node::deleteKey(string key) {
     //Delete the key from the local hash table
     bool keyExists = false;
     bool keyResponse = false;
@@ -486,7 +497,7 @@ bool MP2Node::deletekey(string key) {
  * 				2) Handles the messages according to message types
  */
 void MP2Node::checkMessages() {
-    /*TODO
+    /*
      *Process the messages from client calls, into the server functions, then reply back to client.
      * Process the return messages from server read/write Replies, ONLY if QUORUM(2 nodes) of replies are received(for READ), otherwise fail it.
      * When processing server create/update/delete, make sure the key exists first.
@@ -497,7 +508,6 @@ void MP2Node::checkMessages() {
 	char * data;
 	int size;
     bool boolMsgResult;
-    bool inQueue = false;
     string strMsgResult;
 
 	// dequeue all messages and handle them
@@ -537,7 +547,7 @@ void MP2Node::checkMessages() {
 
         if(incMessage.type == DELETE){
             //Call server delete
-            boolMsgResult = deletekey(incMessage.key);
+            boolMsgResult = deleteKey(incMessage.key);
             //Send result as reply
             Message createRepMsg(incMessage.transID, memberNode->addr, REPLY, boolMsgResult);
             emulNet->ENsend(&memberNode->addr, &incMessage.fromAddr, createRepMsg.toString());
@@ -547,18 +557,33 @@ void MP2Node::checkMessages() {
             //Process write reply into reply queue
             //If write reply transID exists, increment count, or process if quorum achieved, then log success/fail.
             //Loop through the quorumQueue to see if this transID exists, then do magic.
-            for (int i=0; i<quorumQueue.size(); i++){
-                if (incMessage.transID == quorumQueue.at((unsigned long) i).transID){
+            for (unsigned long i=0; i < quorumQueue.size(); i++){
+                if (incMessage.transID == quorumQueue.at(i).transID){
                     //This message exists in the queue, run checks on it.
-                    inQueue = true;
-                    if (quorumQueue.at(i).replyCount == 2){
-                        //this is the last reply for this transaction, log the final result. Result is success as long as msgFailed <=1.
-                        //todo: log result
-                        break;
+                    if (quorumQueue.at(i).replyCount == 2){//todo: should this change to 1? need to account for a success when quorum achieved.
+                        //this is the last reply for this transaction, log the final result. Result is success as long as failCount <=1 and !msgFailed.
+                        if ((quorumQueue.at(i).failCount <= 1) & !quorumQueue.at(i).msgFailed){
+                            //Much success
+                            if (quorumQueue.at(i).msgType == CREATE){
+                                log->logCreateSuccess(&memberNode->addr, true, quorumQueue.at(i).transID, quorumQueue.at(i).originKey, quorumQueue.at(i).originValue);
+                            } else if (quorumQueue.at(i).msgType == UPDATE){
+                                log->logUpdateSuccess(&memberNode->addr, true, quorumQueue.at(i).transID, quorumQueue.at(i).originKey, quorumQueue.at(i).originValue);
+                            } else if (quorumQueue.at(i).msgType == DELETE){
+                                log->logDeleteSuccess(&memberNode->addr, true, quorumQueue.at(i).transID, quorumQueue.at(i).originKey);
+                            }
+                        }
+                        //fail/complete that element
+                        quorumQueue.at(i).msgFailed = true;
                     } else {
-                        //This isn't the final reply for this transaction, store it in the queue.
-
+                        //This isn't the final reply for this transaction, increment replyCount.
+                        ++quorumQueue.at(i).replyCount;
+                        if (incMessage.value == false){
+                            //Increment failCount if false in incMessage msgValue
+                            ++quorumQueue.at(i).failCount;
+                        }
                     }
+                    //We found this message in the queue and processed it, done with loop.
+                    break;
                 }
             }
         }
@@ -567,6 +592,27 @@ void MP2Node::checkMessages() {
             //Process write reply into reply queue
             //If write reply transID exists, increment count, or process if quorum achieved, then log success/fail.
             //Compare reply values
+            for (unsigned long i=0; i < quorumQueue.size(); i++){
+                if (incMessage.transID == quorumQueue.at(i).transID){
+                    //This message exists in the queue, run checks on it.
+                    if (quorumQueue.at(i).replyCount == 2){//todo: should this change to 1? need to account for a success when quorum achieved.
+                        //this is the last reply for this transaction, log the final result. Result is success as long as failCount <=1 and !msgFailed.
+                        if ((quorumQueue.at(i).failCount <= 1) & !quorumQueue.at(i).msgFailed){
+                            //Much success
+                            //todo: log the read success
+                        }
+                        //fail/complete that element
+                        quorumQueue.at(i).msgFailed = true;
+                    } else {
+                        //This isn't the final reply for this transaction, increment replyCount.
+                        ++quorumQueue.at(i).replyCount;
+                        //todo: Increment failcount if fail in incMessage msgValue, increment replyCount, compare reply value(if differ, flag as a failure)
+                        //TODO: NOTE! To accurately determine quorum of READREPLY, need additional fields in replyQueue to account for each reply's value, and then compare them.
+                    }
+                    //We found this message in the queue and processed it, done with loop.
+                    break;
+                }
+            }
         }
 	}
 
@@ -679,6 +725,8 @@ void MP2Node::stabilizationProtocol() {
                 //Get the next trans_id
                 int curTransId = ++trans_id;
 
+                //TODO: NOTE: May need to add queueing on these messages. This process isn't as concerned with replies as the client calls are. Hard to tell because of coordinator logic.
+                //TODO: NOTE: May need to change these messages to force the server receiving to not log.
                 //Construct the message and send to new primary
                 Message newPrimaryMessage(curTransId, memberNode->addr, CREATE, keyString, checkValue.value, PRIMARY);
                 emulNet->ENsend(&memberNode->addr, &keyLocations.at(0).nodeAddress, newPrimaryMessage.toString());
@@ -737,15 +785,13 @@ void MP2Node::stabilizationProtocol() {
  *              Stale messages are those that have a globaltime - timestamp > MFAIL
  */
 void MP2Node::cleanRepQueue() {
-    for (int i=0; i < quorumQueue.size(); i++){
-        if (par->globaltime - quorumQueue.at((unsigned long) i).timestamp > MFAIL){
+    for (unsigned long i=0; i < quorumQueue.size(); i++){
+        if ((par->globaltime - quorumQueue.at(i).timestamp > MFAIL)){
+            //todo: check failcount as well, and make sure msgFailed is not already true before logging a fail
             //Passed fail time, fail the message.
-            quorumQueue.at((unsigned long) i).msgFailed = quorumQueue.at((unsigned long) i).msgFailed +2;
+            quorumQueue.at(i).msgFailed = true;
             //todo: log the failure.
         }
-        //if (quorumQueue.at(i).replyCount == 3){
-            //todo: This message has fully succeeded, delete it and re-size "if size becomes a performance issue."
-        //}
     }
 }
 
@@ -757,13 +803,30 @@ replyQueue::replyQueue() {}
 /**
  * constructor
  */
-replyQueue::replyQueue(int transID, long timestamp, string msgValue, int replyCount, int msgFailed) {
+replyQueue::replyQueue(int transID, long timestamp, string msgResponse, int replyCount, bool msgFailed, int failCount, MessageType msgType, string originKey, string originValue) {
     this->transID = transID;
     this->timestamp = timestamp;
-    this->msgValue = msgValue;
+    this->msgResponse = msgResponse;
     this->replyCount = replyCount;
     this->msgFailed = msgFailed;
+    this->failCount = failCount;
+    this->msgType = msgType;
+    this->originKey = originKey;
+    this->originValue = originValue;
 }
+
+/**!!UNUSED FOR NOW!!
+ * constructor
+ *
+replyQueue::replyQueue(int transID, long timestamp, int replyCount, bool msgFailed, int failCount, Message originMsg) {
+    this->transID = transID;
+    this->timestamp = timestamp;
+    this->replyCount = replyCount;
+    this->msgFailed = msgFailed;
+    this->failCount = failCount;
+    this->originMsg = originMsg;
+}
+ */
 
 /**
  * Destructor
@@ -776,9 +839,13 @@ replyQueue::~replyQueue() {}
 replyQueue::replyQueue(const replyQueue& another) {
     this->transID = another.transID;
     this->timestamp = another.timestamp;
-    this->msgValue = another.msgValue;
+    this->msgResponse = another.msgResponse;
     this->replyCount = another.replyCount;
     this->msgFailed = another.msgFailed;
+    this->failCount = another.failCount;
+    this->msgType = another.msgType;
+    this->originKey = another.originKey;
+    this->originValue = another.originValue;
 }
 
 /**
@@ -787,9 +854,13 @@ replyQueue::replyQueue(const replyQueue& another) {
 replyQueue& replyQueue::operator=(const replyQueue& another) {
     this->transID = another.transID;
     this->timestamp = another.timestamp;
-    this->msgValue = another.msgValue;
+    this->msgResponse = another.msgResponse;
     this->replyCount = another.replyCount;
     this->msgFailed = another.msgFailed;
+    this->failCount = another.failCount;
+    this->msgType = another.msgType;
+    this->originKey = another.originKey;
+    this->originValue = another.originValue;
     return *this;
 }
 
