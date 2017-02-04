@@ -412,7 +412,7 @@ string MP2Node::readKey(string key) {
         keyResponse = ht->read(key);
     } else {
         //Key doesn't exist, return 0.
-        return 0;
+        return "failed";
     }
 
     return keyResponse;
@@ -560,10 +560,10 @@ void MP2Node::checkMessages() {
             for (unsigned long i=0; i < quorumQueue.size(); i++){
                 if (incMessage.transID == quorumQueue.at(i).transID){
                     //This message exists in the queue, run checks on it.
-                    if (quorumQueue.at(i).replyCount == 2){//todo: should this change to 1? need to account for a success when quorum achieved.
-                        //this is the last reply for this transaction, log the final result. Result is success as long as failCount <=1 and !msgFailed.
-                        if ((quorumQueue.at(i).failCount <= 1) & !quorumQueue.at(i).msgFailed){
-                            //Much success
+                    if (quorumQueue.at(i).replyCount == 2){
+                        //this is the last reply for this transaction, log the final result. Result is success as long as failCount <=1 and !msgFailed and incoming message is a success.
+                        if ((quorumQueue.at(i).failCount <= 1) && !quorumQueue.at(i).msgFailed && incMessage.success){
+                            //Much success, such log
                             if (quorumQueue.at(i).msgType == CREATE){
                                 log->logCreateSuccess(&memberNode->addr, true, quorumQueue.at(i).transID, quorumQueue.at(i).originKey, quorumQueue.at(i).originValue);
                             } else if (quorumQueue.at(i).msgType == UPDATE){
@@ -571,16 +571,44 @@ void MP2Node::checkMessages() {
                             } else if (quorumQueue.at(i).msgType == DELETE){
                                 log->logDeleteSuccess(&memberNode->addr, true, quorumQueue.at(i).transID, quorumQueue.at(i).originKey);
                             }
+                        } else {
+                            //Failed WOW!!! Log the failure, if it hasn't already happened. Otherwise, the last message is just dust in the wind...
+                            if (!quorumQueue.at(i).msgFailed){
+                                if (quorumQueue.at(i).msgType == CREATE){
+                                    log->logCreateFail(&memberNode->addr, true, quorumQueue.at(i).transID, quorumQueue.at(i).originKey, quorumQueue.at(i).originValue);
+                                } else if (quorumQueue.at(i).msgType == UPDATE){
+                                    log->logUpdateFail(&memberNode->addr, true, quorumQueue.at(i).transID, quorumQueue.at(i).originKey, quorumQueue.at(i).originValue);
+                                } else if (quorumQueue.at(i).msgType == DELETE) {
+                                    log->logDeleteFail(&memberNode->addr, true, quorumQueue.at(i).transID,
+                                                       quorumQueue.at(i).originKey);
+                                }
+                            }
                         }
                         //fail/complete that element
                         quorumQueue.at(i).msgFailed = true;
-                    } else {
-                        //This isn't the final reply for this transaction, increment replyCount.
                         ++quorumQueue.at(i).replyCount;
-                        if (incMessage.value == false){
-                            //Increment failCount if false in incMessage msgValue
+                    } else {
+                        //Now check to see if the incoming and 1 existing message is a success, then log success if true. Otherwise, add to values and finish.
+                        if (incMessage.success){
+                            //Incoming is success, see if other success criteria apply
+                            if((quorumQueue.at(i).replyCount == 1) && (quorumQueue.at(i).failCount == 0)){
+                                //Much success, log it
+                                if (quorumQueue.at(i).msgType == CREATE){
+                                    log->logCreateSuccess(&memberNode->addr, true, quorumQueue.at(i).transID, quorumQueue.at(i).originKey, quorumQueue.at(i).originValue);
+                                } else if (quorumQueue.at(i).msgType == UPDATE){
+                                    log->logUpdateSuccess(&memberNode->addr, true, quorumQueue.at(i).transID, quorumQueue.at(i).originKey, quorumQueue.at(i).originValue);
+                                } else if (quorumQueue.at(i).msgType == DELETE){
+                                    log->logDeleteSuccess(&memberNode->addr, true, quorumQueue.at(i).transID, quorumQueue.at(i).originKey);
+                                }
+                                //and flag as complete
+                                quorumQueue.at(i).msgFailed = true;
+                            }
+                        } else {
+                            //incMessage was a fail, Increment failCount.
                             ++quorumQueue.at(i).failCount;
                         }
+                        //This isn't the final reply for this transaction, increment replyCount.
+                        ++quorumQueue.at(i).replyCount;
                     }
                     //We found this message in the queue and processed it, done with loop.
                     break;
@@ -589,25 +617,58 @@ void MP2Node::checkMessages() {
         }
 
         if(incMessage.type == READREPLY){
-            //Process write reply into reply queue
-            //If write reply transID exists, increment count, or process if quorum achieved, then log success/fail.
-            //Compare reply values
+            //***NOTE! This is logic hell. Here be Dragons...***
+            //TODO: NOTE! To accurately determine quorum of READREPLY, need additional fields in replyQueue to account for each reply's value, and then compare them.
             for (unsigned long i=0; i < quorumQueue.size(); i++){
                 if (incMessage.transID == quorumQueue.at(i).transID){
                     //This message exists in the queue, run checks on it.
-                    if (quorumQueue.at(i).replyCount == 2){//todo: should this change to 1? need to account for a success when quorum achieved.
-                        //this is the last reply for this transaction, log the final result. Result is success as long as failCount <=1 and !msgFailed.
-                        if ((quorumQueue.at(i).failCount <= 1) & !quorumQueue.at(i).msgFailed){
+                    if (quorumQueue.at(i).replyCount == 2){
+                        //this is the last reply for this transaction, log the final result.
+                        //Result is success as long as failCount <=1 and !msgFailed and incoming message value is not false, and incMessage value matches other replies.
+                        if ((quorumQueue.at(i).failCount <= 1) && !quorumQueue.at(i).msgFailed && (incMessage.value != "false") && (incMessage.value == quorumQueue.at(i).msgResponse)){
                             //Much success
-                            //todo: log the read success
+                            log->logReadSuccess(&memberNode->addr, true, quorumQueue.at(i).transID, quorumQueue.at(i).originKey, incMessage.value);
+                        } else {
+                            //This message is or has failed. Log the failure, if it hasn't already happened. Otherwise, the last message is just dust in the wind...
+                            if (!quorumQueue.at(i).msgFailed){
+                                log->logReadFail(&memberNode->addr, true, quorumQueue.at(i).transID, quorumQueue.at(i).originKey);
+                            }
                         }
                         //fail/complete that element
                         quorumQueue.at(i).msgFailed = true;
+                        ++quorumQueue.at(i).replyCount;
+                    } else if(quorumQueue.at(i).replyCount == 1){
+                        //See if the incoming message is valid and there are no previous fails
+                        if ((incMessage.value != "false") && (quorumQueue.at(i).failCount == 0)){
+                            //See if this message matches the current
+                            if (incMessage.value == quorumQueue.at(i).msgResponse){
+                                //Much success, log it.
+                                log->logReadSuccess(&memberNode->addr, true, quorumQueue.at(i).transID, quorumQueue.at(i).originKey, incMessage.value);
+                                //and flag as complete
+                                quorumQueue.at(i).msgFailed = true;
+                            } else {
+                                //The incoming value differs from the first. Increment fail.
+                                ++quorumQueue.at(i).failCount;
+                            }
+                        } else if(incMessage.value == "false") {
+                            //Incoming message is a bust. Increment fail.
+                            ++quorumQueue.at(i).failCount;
+                        } else {
+                            //Previous message was a fail. Store this success in quorumQueue.
+                            quorumQueue.at(i).msgResponse = incMessage.value;
+                        }
+                        ++quorumQueue.at(i).replyCount;
                     } else {
+                        //This is the first message in. Increment fail if it is a fail, otherwise store the value.
+                        if (incMessage.value != "false"){
+                            //Incoming is valid, store the value
+                            quorumQueue.at(i).msgResponse = incMessage.value;
+                        } else {
+                            //incMessage was a fail, Increment failCount.
+                            ++quorumQueue.at(i).failCount;
+                        }
                         //This isn't the final reply for this transaction, increment replyCount.
                         ++quorumQueue.at(i).replyCount;
-                        //todo: Increment failcount if fail in incMessage msgValue, increment replyCount, compare reply value(if differ, flag as a failure)
-                        //TODO: NOTE! To accurately determine quorum of READREPLY, need additional fields in replyQueue to account for each reply's value, and then compare them.
                     }
                     //We found this message in the queue and processed it, done with loop.
                     break;
@@ -615,7 +676,6 @@ void MP2Node::checkMessages() {
             }
         }
 	}
-
     //Now run the cleanup on the replyQueue if time calls for it.
     if (memberNode->pingCounter % 5 == 0){
         cleanRepQueue();
@@ -786,11 +846,18 @@ void MP2Node::stabilizationProtocol() {
  */
 void MP2Node::cleanRepQueue() {
     for (unsigned long i=0; i < quorumQueue.size(); i++){
-        if ((par->globaltime - quorumQueue.at(i).timestamp > MFAIL)){
-            //todo: check failcount as well, and make sure msgFailed is not already true before logging a fail
-            //Passed fail time, fail the message.
+        if (((par->globaltime - quorumQueue.at(i).timestamp) > MFAIL) && (!quorumQueue.at(i).msgFailed)){
+            //Passed fail time and message is still active, fail the message.
             quorumQueue.at(i).msgFailed = true;
-            //todo: log the failure.
+            if (quorumQueue.at(i).msgType == CREATE) {
+                log->logCreateFail(&memberNode->addr, true, quorumQueue.at(i).transID, quorumQueue.at(i).originKey, quorumQueue.at(i).originValue);
+            } else if(quorumQueue.at(i).msgType == READ){
+                log->logReadFail(&memberNode->addr, true, quorumQueue.at(i).transID, quorumQueue.at(i).originKey);
+            } else if(quorumQueue.at(i).msgType == UPDATE){
+                log->logUpdateFail(&memberNode->addr, true, quorumQueue.at(i).transID, quorumQueue.at(i).originKey, quorumQueue.at(i).originValue);
+            } else if(quorumQueue.at(i).msgType == DELETE){
+                log->logDeleteFail(&memberNode->addr, true, quorumQueue.at(i).transID, quorumQueue.at(i).originKey);
+            }
         }
     }
 }
