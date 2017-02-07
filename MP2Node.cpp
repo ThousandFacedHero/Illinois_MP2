@@ -524,7 +524,13 @@ void MP2Node::checkMessages() {
         if(incMessage.type == CREATE){
             //Call server create
             boolMsgResult = createKeyValue(incMessage.key, incMessage.value, incMessage.replica);
-            //Send result as reply
+            //Log and send result as reply
+            if (boolMsgResult) {
+                log->logCreateSuccess(&memberNode->addr, false, incMessage.transID, incMessage.key, incMessage.value);
+            } else {
+                //Log fail
+                log->logCreateFail(&memberNode->addr, false, incMessage.transID, incMessage.key, incMessage.value);
+            }
             Message createRepMsg(incMessage.transID, memberNode->addr, REPLY, boolMsgResult);
             emulNet->ENsend(&memberNode->addr, &incMessage.fromAddr, createRepMsg.toString());
         }
@@ -532,7 +538,13 @@ void MP2Node::checkMessages() {
         if(incMessage.type == READ){
             //Call server read
             strMsgResult = readKey(incMessage.key);
-            //Send result as readReply
+            //Log and send result as readReply
+            if (strMsgResult != "false") {
+                log->logReadSuccess(&memberNode->addr, false, incMessage.transID, incMessage.key, incMessage.value);
+            } else {
+                //Log fail
+                log->logReadFail(&memberNode->addr, false, incMessage.transID, incMessage.key);
+            }
             Message createRepMsg(incMessage.transID, memberNode->addr, READREPLY, strMsgResult);
             emulNet->ENsend(&memberNode->addr, &incMessage.fromAddr, createRepMsg.toString());
         }
@@ -540,7 +552,13 @@ void MP2Node::checkMessages() {
         if(incMessage.type == UPDATE){
             //Call server update
             boolMsgResult = updateKeyValue(incMessage.key, incMessage.value, incMessage.replica);
-            //Send result as reply
+            //Log and send result as reply
+            if (boolMsgResult) {
+                log->logUpdateSuccess(&memberNode->addr, false, incMessage.transID, incMessage.key, incMessage.value);
+            } else {
+                //Log fail
+                log->logUpdateFail(&memberNode->addr, false, incMessage.transID, incMessage.key, incMessage.value);
+            }
             Message createRepMsg(incMessage.transID, memberNode->addr, REPLY, boolMsgResult);
             emulNet->ENsend(&memberNode->addr, &incMessage.fromAddr, createRepMsg.toString());
         }
@@ -549,6 +567,12 @@ void MP2Node::checkMessages() {
             //Call server delete
             boolMsgResult = deleteKey(incMessage.key);
             //Send result as reply
+            if (boolMsgResult) {
+                log->logDeleteSuccess(&memberNode->addr, false, incMessage.transID, incMessage.key);
+            } else {
+                //Log fail
+                log->logDeleteFail(&memberNode->addr, false, incMessage.transID, incMessage.key);
+            }
             Message createRepMsg(incMessage.transID, memberNode->addr, REPLY, boolMsgResult);
             emulNet->ENsend(&memberNode->addr, &incMessage.fromAddr, createRepMsg.toString());
         }
