@@ -63,7 +63,7 @@ private:
 	// Vector holding the next two neighbors in the ring who have my replicas
 	vector<Node> hasMyReplicas;
 	// Vector holding the previous two neighbors in the ring whose replicas I have
-	vector<Node> haveReplicasOf;
+	//vector<Node> haveReplicasOf;
 	// Ring
 	vector<Node> ring;
     //Ring location of this node
@@ -79,7 +79,7 @@ private:
 	// Object of Log
 	Log * log;
 	//transactionID
-	int trans_id = 0;
+	//int trans_id = 0;
     //Queue for read/write replies, to obtain quorum of responses.
     vector<replyQueue> quorumQueue;
 
@@ -94,7 +94,7 @@ public:
 	vector<Node> getMembershipList();
 	size_t hashFunction(string key);
     vector<Node> findNeighborsUp(vector<Node> searchNode);
-    vector<Node> findNeighborsDown(vector<Node> searchNode);
+    //vector<Node> findNeighborsDown(vector<Node> searchNode);
 
 	// client side CRUD APIs
 	void clientCreate(string key, string value);

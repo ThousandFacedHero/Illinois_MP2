@@ -158,7 +158,6 @@ vector<Node> MP2Node::findNeighborsUp(vector<Node> searchNode) {
                     upNeighborAddrVec.emplace_back(ring.at(0));
                     upNeighborAddrVec.emplace_back(ring.at(1));
                 } else {
-                    cout<<"ring size is:"<<ring.size()<<endl;
                     upNeighborAddrVec.emplace_back(ring.at((unsigned long) (i + 1)));
                     upNeighborAddrVec.emplace_back(ring.at((unsigned long) (i + 2)));
                 }
@@ -177,7 +176,7 @@ vector<Node> MP2Node::findNeighborsUp(vector<Node> searchNode) {
  *
  * RETURNS:
  * vector<Node> with previous 2 nodes
- */
+
 vector<Node> MP2Node::findNeighborsDown(vector<Node> searchNode) {
 
     vector<Node> downNeighborAddrVec;
@@ -202,7 +201,9 @@ vector<Node> MP2Node::findNeighborsDown(vector<Node> searchNode) {
     }
     return downNeighborAddrVec;
 
+
 }
+*/
 
 /**
  * FUNCTION NAME: clientCreate
@@ -217,7 +218,7 @@ void MP2Node::clientCreate(string key, string value) {
     //Find the Nodes to send this key to.
     vector<Node> targetNodes = findNodes(key);
     if (targetNodes.size() > 0) {
-        int curTransId = ++trans_id;
+        int curTransId = ++g_transID;
 
         //Construct and Send to the primary node
         Message primaryMessage(curTransId, memberNode->addr, CREATE, key, value, PRIMARY);
@@ -252,8 +253,8 @@ void MP2Node::clientRead(string key){
     //Find the Nodes to for this key.
     vector<Node> targetNodes = findNodes(key);
     if (targetNodes.size() > 0) {
-        //Increment the trans_id
-        int curTransId = ++trans_id;
+        //Increment the g_transID
+        int curTransId = ++g_transID;
 
         //Construct and Send to the primary node
         Message primaryMessage(curTransId, memberNode->addr, READ, key);
@@ -288,7 +289,7 @@ void MP2Node::clientUpdate(string key, string value){
     //Find the Nodes to send this key to.
     vector<Node> targetNodes = findNodes(key);
     if (targetNodes.size() > 0) {
-        int curTransId = ++trans_id;
+        int curTransId = ++g_transID;
 
         //Construct and Send to the primary node
         Message primaryMessage(curTransId, memberNode->addr, UPDATE, key, value, PRIMARY);
@@ -323,7 +324,7 @@ void MP2Node::clientDelete(string key){
     //Find the Nodes to delete from.
     vector<Node> targetNodes = findNodes(key);
     if (targetNodes.size() > 0) {
-        int curTransId = ++trans_id;
+        int curTransId = ++g_transID;
 
         //Construct and Send to the primary node
         Message primaryMessage(curTransId, memberNode->addr, DELETE, key);
@@ -394,8 +395,7 @@ bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
 string MP2Node::readKey(string key) {
     //Read key from local hash table and return value
     bool keyExists = false;
-    string keyResponse;
-
+    string returnVal = "false";
     //Check hashtable for the key.
     map<string, string>::iterator it = ht->hashTable.begin();
     while (it != ht->hashTable.end()) {
@@ -410,13 +410,11 @@ string MP2Node::readKey(string key) {
 
     //Return the key value if it exists.
     if (keyExists){
-        keyResponse = ht->read(key);
-    } else {
-        //Key doesn't exist, return 0.
-        return "failed";
+        Entry keyResponse(ht->read(key));
+        returnVal = keyResponse.value;
     }
 
-    return keyResponse;
+    return returnVal;
 }
 
 /**
@@ -541,12 +539,12 @@ void MP2Node::checkMessages() {
             strMsgResult = readKey(incMessage.key);
             //Log and send result as readReply
             if (strMsgResult != "false") {
-                log->logReadSuccess(&memberNode->addr, false, incMessage.transID, incMessage.key, incMessage.value);
+                log->logReadSuccess(&memberNode->addr, false, incMessage.transID, incMessage.key, strMsgResult);
             } else {
                 //Log fail
                 log->logReadFail(&memberNode->addr, false, incMessage.transID, incMessage.key);
             }
-            Message createRepMsg(incMessage.transID, memberNode->addr, READREPLY, strMsgResult);
+            Message createRepMsg(incMessage.transID, memberNode->addr, strMsgResult);
             emulNet->ENsend(&memberNode->addr, &incMessage.fromAddr, createRepMsg.toString());
         }
 
@@ -776,16 +774,16 @@ int MP2Node::enqueueWrapper(void *env, char *buff, int size) {
 void MP2Node::stabilizationProtocol() {
 
     vector<Node> newUpNeighbors;
-    vector<Node> newDownNeighbors;
+    //vector<Node> newDownNeighbors;
     //Rerun findNeighbors to see if values differ. If different, then copy keys as needed, and update neighbor variables.
     newUpNeighbors = findNeighborsUp(myRingPos);
     sort(newUpNeighbors.begin(), newUpNeighbors.end());
     bool upNeighborChanged = false;
-    newDownNeighbors = findNeighborsDown(myRingPos);
-    sort(newDownNeighbors.begin(), newDownNeighbors.end());
+    //newDownNeighbors = findNeighborsDown(myRingPos);
+    //sort(newDownNeighbors.begin(), newDownNeighbors.end());
 
     //See if the neighbors are the same, if not, set new ones
-    if ((newUpNeighbors.at(0).getHashCode() != hasMyReplicas.at(0).getHashCode()) | (newUpNeighbors.at(1).getHashCode() != hasMyReplicas.at(1).getHashCode())){
+    if ((newUpNeighbors.at(0).getHashCode() != hasMyReplicas.at(0).getHashCode()) || (newUpNeighbors.at(1).getHashCode() != hasMyReplicas.at(1).getHashCode())){
         //Update Neighbor variable with updated ring data
         hasMyReplicas = newUpNeighbors;
         upNeighborChanged = true;
@@ -807,8 +805,8 @@ void MP2Node::stabilizationProtocol() {
             //This node is primary for this key, now see if it should be.
             if (keyLocations.at(0).getHashCode() != myRingPos.at(0).getHashCode()) {
                 //This node is no longer the primary for that key, replicate to that node and it's neighbors.
-                //Get the next trans_id
-                int curTransId = ++trans_id;
+                //Get the next g_transID
+                int curTransId = ++g_transID;
 
                 //TODO: NOTE: May need to add queueing on these messages. This process isn't as concerned with replies as the client calls are. Hard to tell because of coordinator logic.
                 //TODO: NOTE: May need to change these messages to force the server receiving to not log.
@@ -843,8 +841,8 @@ void MP2Node::stabilizationProtocol() {
 
             //Now that the replica types are set correctly, broadcast out the primary key to neighbors, if they changed.
             if (upNeighborChanged && checkValue.replica == PRIMARY){
-                //Grab next trans_id
-                int nxtTransId = ++trans_id;
+                //Grab next g_transID
+                int nxtTransId = ++g_transID;
 
                 if (hasMyReplicas.size() > 1) {
                     //Construct and send to the secondary node
