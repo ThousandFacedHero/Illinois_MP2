@@ -54,8 +54,8 @@ void MP2Node::updateRing() {
         //After initially constructing the ring, set/sort the variables for neighbors that require replicas.
         hasMyReplicas = findNeighborsUp(myRingPos);
         sort(hasMyReplicas.begin(), hasMyReplicas.end());
-        haveReplicasOf= findNeighborsDown(myRingPos);
-        sort(haveReplicasOf.begin(), haveReplicasOf.end());
+        //haveReplicasOf= findNeighborsDown(myRingPos);
+        //sort(haveReplicasOf.begin(), haveReplicasOf.end());
     }
 
 	//Compare new and current rings by iteration(or count if nodes don't change their hash) when a node has failed or joined
@@ -64,7 +64,7 @@ void MP2Node::updateRing() {
         change = true;
     } else {
         //Ring size is the same, so let's iterate through to check for changes.
-        for (int i = 0; i < ring.size(); i++){
+        for (int i = 0; i < (int) ring.size(); i++){
             if (ring.at((unsigned long) i).getHashCode() != newMemList.at((unsigned long) i).getHashCode()){
                 //Rings differ, call stab
                 change = true;
@@ -87,7 +87,7 @@ void MP2Node::updateRing() {
     */
 
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
-    if (ht->currentSize() > 0 & change){
+    if (ht->currentSize() > 0 && change){
         stabilizationProtocol();
     }
 
@@ -148,16 +148,17 @@ vector<Node> MP2Node::findNeighborsUp(vector<Node> searchNode) {
     vector<Node> upNeighborAddrVec;
     if (ring.size() >= 3) {
         // grab next two nodes in ring after searchNode
-        for (int i=0; i < ring.size(); i++) {
+        for (int i=0; i <= (int)ring.size()-1; i++) {
             if (searchNode.at(0).getHashCode() == ring.at((unsigned long) i).getHashCode()) {
                 //Loop back around the ring when hitting the end of vector
-                if ((i + 1) == ring.size()){
-                    upNeighborAddrVec.emplace_back(ring.at(ring.size()));
+                if ((i + 1) == (int)ring.size()-1){
+                    upNeighborAddrVec.emplace_back(ring.at(ring.size()-1));
                     upNeighborAddrVec.emplace_back(ring.at(0));
-                } else if (i == ring.size()){
+                } else if (i == (int)ring.size()-1){
                     upNeighborAddrVec.emplace_back(ring.at(0));
                     upNeighborAddrVec.emplace_back(ring.at(1));
                 } else {
+                    cout<<"ring size is:"<<ring.size()<<endl;
                     upNeighborAddrVec.emplace_back(ring.at((unsigned long) (i + 1)));
                     upNeighborAddrVec.emplace_back(ring.at((unsigned long) (i + 2)));
                 }
@@ -182,7 +183,7 @@ vector<Node> MP2Node::findNeighborsDown(vector<Node> searchNode) {
     vector<Node> downNeighborAddrVec;
     if (ring.size() >= 3) {
         // grab previous two nodes in ring before searchNode
-        for (int i=0; i < ring.size(); i++) {
+        for (int i=0; i < (int)ring.size(); i++) {
             if (searchNode.at(0).getHashCode() == ring.at((unsigned long) i).getHashCode()) {
                 //Loop back around the ring when hitting the beginning of vector
                 if (i == 1){
@@ -701,7 +702,7 @@ vector<Node> MP2Node::findNodes(string key) {
 		}
 		else {
 			// go through the ring until pos <= node
-			for (int i=1; i<ring.size(); i++){
+			for (int i=1; i<(int)ring.size(); i++){
 				Node addr = ring.at((unsigned long) i);
 				if (pos <= addr.getHashCode()) {
 					addr_vec.emplace_back(addr);
@@ -766,10 +767,10 @@ void MP2Node::stabilizationProtocol() {
         upNeighborChanged = true;
     }
 
-    if ((newDownNeighbors.at(0).getHashCode() != haveReplicasOf.at(0).getHashCode()) | (newDownNeighbors.at(1).getHashCode() != haveReplicasOf.at(1).getHashCode())){
+    //if ((newDownNeighbors.at(0).getHashCode() != haveReplicasOf.at(0).getHashCode()) | (newDownNeighbors.at(1).getHashCode() != haveReplicasOf.at(1).getHashCode())){
         //Update Neighbor variable with updated ring data
-        haveReplicasOf = newDownNeighbors;
-    }
+        //haveReplicasOf = newDownNeighbors;
+    //}
 
     //For each key in this node's DHT, run findNodes(). If it doesn't return a vector with myRingPos, replicate to the correct node.
     map<string, string>::iterator it = ht->hashTable.begin();
@@ -817,7 +818,7 @@ void MP2Node::stabilizationProtocol() {
             }
 
             //Now that the replica types are set correctly, broadcast out the primary key to neighbors, if they changed.
-            if (upNeighborChanged & checkValue.replica == PRIMARY){
+            if (upNeighborChanged && checkValue.replica == PRIMARY){
                 //Grab next trans_id
                 int nxtTransId = ++trans_id;
 

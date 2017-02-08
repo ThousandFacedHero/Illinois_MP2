@@ -24,6 +24,30 @@
  */
 #define MFAIL 15
 
+/** CLASS NAME: replyQueue
+ * Reply queue class with transID, timestamp, value, replyCount.
+ * For use in reply queue vector.
+ */
+class replyQueue {
+public:
+    int transID; //transaction id
+    long timestamp; //comes from par->globalTime
+    string msgResponse; //holds the key value for READREPLY
+    int replyCount; //number of reply messages received per transID
+    bool msgFailed; //message has failed because quorum of fails or has timed out
+    int failCount; //number of messages in queue, per transID, that have a failed response(false value)
+    MessageType msgType; //Original request message type
+    string originKey;
+    string originValue;
+
+    replyQueue();
+    replyQueue(int transID, long timestamp, string msgResponse, int replyCount, bool msgFailed, int failCount, MessageType msgType, string originKey, string originValue);
+    //replyQueue(int transID, long timestamp, int replyCount, bool msgFailed, int failCount, MessageType msgType, string originKey, string originValue);
+    virtual ~replyQueue();
+    replyQueue(const replyQueue& another);
+    replyQueue& operator=(const replyQueue& another);
+};
+
 /**
  * CLASS NAME: MP2Node
  *
@@ -106,28 +130,5 @@ public:
 	~MP2Node();
 };
 
-/** CLASS NAME: replyQueue
- * Reply queue class with transID, timestamp, value, replyCount.
- * For use in reply queue vector.
- */
-class replyQueue {
-public:
-    int transID; //transaction id
-    long timestamp; //comes from par->globalTime
-    string msgResponse; //holds the key value for READREPLY
-    int replyCount; //number of reply messages received per transID
-    bool msgFailed; //message has failed because quorum of fails or has timed out
-    int failCount; //number of messages in queue, per transID, that have a failed response(false value)
-    MessageType msgType; //Original request message type
-    string originKey;
-    string originValue;
 
-    replyQueue();
-    replyQueue(int transID, long timestamp, string msgResponse, int replyCount, bool msgFailed, int failCount, MessageType msgType, string originKey, string originValue);
-    //replyQueue(int transID, long timestamp, int replyCount, bool msgFailed, int failCount, MessageType msgType, string originKey, string originValue);
-    virtual ~replyQueue();
-    replyQueue(const replyQueue& another);
-    replyQueue& operator=(const replyQueue& another);
-
-};
 #endif /* MP2NODE_H_ */
