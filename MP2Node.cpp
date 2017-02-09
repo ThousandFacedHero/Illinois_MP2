@@ -40,32 +40,50 @@ void MP2Node::updateRing() {
     //vector<Node> failList;
     //vector<Node> addList;
 	bool change = false;
+    vector<int> newCodes;
+    vector<Node> sortedList;
 
 	 //Get the current membership list from Membership Protocol / MP1
 	newMemList = getMembershipList();
     // Sort the list based on the hashCode
-    sort(newMemList.begin(), newMemList.end());
+    //sort(newMemList.begin(), newMemList.end());
+    //todo: build a sorting loop for newMemList based on hash code
+    for (int i=0; i < (int)newMemList.size(); i++){
+        //Dump all the hash codes into an int vector for sorting
+        newCodes.emplace_back((int)newMemList.at((unsigned long)i).nodeHashCode);
+    }
+    //sort it
+    sort(newCodes.begin(), newCodes.end());
+    //build a sorted version of newMemList
+    for (int i=0; i < (int)newMemList.size(); i++){
+        //Loop over the memList to find the matching element
+        for (int z=0; z <(int)newMemList.size(); z++){
+            if ((int)newMemList.at((unsigned long) z).nodeHashCode == newCodes.at((unsigned long) i)){
+                sortedList.emplace_back(newMemList.at((unsigned long) z));
+            }
+        }
+    }
 
 	//Construct the ring, if it isn't already constructed
     if (ring.size() == 0){
-        ring = newMemList;
+        ring = sortedList;
         //Find your own position in the ring
         myRingPos.emplace_back(Node(memberNode->addr));
         //After initially constructing the ring, set/sort the variables for neighbors that require replicas.
         hasMyReplicas = findNeighborsUp(myRingPos);
-        sort(hasMyReplicas.begin(), hasMyReplicas.end());
+        //sort(hasMyReplicas.begin(), hasMyReplicas.end());
         //haveReplicasOf= findNeighborsDown(myRingPos);
         //sort(haveReplicasOf.begin(), haveReplicasOf.end());
     }
 
 	//Compare new and current rings by iteration(or count if nodes don't change their hash) when a node has failed or joined
-    if (ring.size() != newMemList.size()){
+    if (ring.size() != sortedList.size()){
         //Rings are different, set changed and call stab protocol
         change = true;
     } else {
         //Ring size is the same, so let's iterate through to check for changes.
         for (int i = 0; i < (int) ring.size(); i++){
-            if (ring.at((unsigned long) i).getHashCode() != newMemList.at((unsigned long) i).getHashCode()){
+            if (ring.at((unsigned long) i).getHashCode() != sortedList.at((unsigned long) i).getHashCode()){
                 //Rings differ, call stab
                 change = true;
                 break;
@@ -88,6 +106,7 @@ void MP2Node::updateRing() {
 
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
     if (ht->currentSize() > 0 && change){
+        ring = sortedList;
         stabilizationProtocol();
     }
 
@@ -148,7 +167,7 @@ vector<Node> MP2Node::findNeighborsUp(vector<Node> searchNode) {
     vector<Node> upNeighborAddrVec;
     if (ring.size() >= 3) {
         // grab next two nodes in ring after searchNode
-        for (int i=0; i <= (int)ring.size()-1; i++) {
+        for (int i=0; i < (int)ring.size(); i++) {
             if (searchNode.at(0).getHashCode() == ring.at((unsigned long) i).getHashCode()) {
                 //Loop back around the ring when hitting the end of vector
                 if ((i + 1) == (int)ring.size()-1){
@@ -236,7 +255,7 @@ void MP2Node::clientCreate(string key, string value) {
         }
 
         //Store the message in the queue
-        quorumQueue.emplace_back(replyQueue(curTransId, par->globaltime, to_string(0), 0, false, 0, DELETE, key, value));
+        quorumQueue.emplace_back(replyQueue(curTransId, par->globaltime, to_string(0), 0, false, 0, CREATE, key, value));
     }
 }
 
@@ -777,7 +796,7 @@ void MP2Node::stabilizationProtocol() {
     //vector<Node> newDownNeighbors;
     //Rerun findNeighbors to see if values differ. If different, then copy keys as needed, and update neighbor variables.
     newUpNeighbors = findNeighborsUp(myRingPos);
-    sort(newUpNeighbors.begin(), newUpNeighbors.end());
+    //sort(newUpNeighbors.begin(), newUpNeighbors.end());
     bool upNeighborChanged = false;
     //newDownNeighbors = findNeighborsDown(myRingPos);
     //sort(newDownNeighbors.begin(), newDownNeighbors.end());
@@ -844,14 +863,14 @@ void MP2Node::stabilizationProtocol() {
                 //Grab next g_transID
                 int nxtTransId = ++g_transID;
 
-                if (hasMyReplicas.size() > 1) {
+                if (hasMyReplicas.size() == 1) {
                     //Construct and send to the secondary node
-                    Message secondaryMessage(nxtTransId, memberNode->addr, CREATE, keyString);
+                    Message secondaryMessage(nxtTransId, memberNode->addr, CREATE, keyString, checkValue.value, SECONDARY);
                     emulNet->ENsend(&memberNode->addr, &hasMyReplicas.at(0).nodeAddress, secondaryMessage.toString());
                 }
-                if (hasMyReplicas.size() > 2) {
+                if (hasMyReplicas.size() == 2) {
                     //Construct and send to the tertiary node
-                    Message tertiaryMessage(nxtTransId, memberNode->addr, CREATE, keyString);
+                    Message tertiaryMessage(nxtTransId, memberNode->addr, CREATE, keyString, checkValue.value, TERTIARY);
                     emulNet->ENsend(&memberNode->addr, &hasMyReplicas.at(1).nodeAddress, tertiaryMessage.toString());
                 }
             }
